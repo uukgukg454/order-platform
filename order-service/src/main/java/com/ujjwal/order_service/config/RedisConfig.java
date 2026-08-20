@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
@@ -83,12 +84,14 @@ public class RedisConfig {
     public CacheManager cacheManager(RedisConnectionFactory connectionFactory,
                                       @Value("${app.cache.order-ttl-seconds}") long orderCacheTtlSeconds,
                                       @Value("${app.cache.order-local-ttl-seconds}") long orderLocalCacheTtlSeconds,
-                                      @Value("${app.cache.order-local-max-size}") long orderLocalCacheMaxSize) {
+                                      @Value("${app.cache.order-local-max-size}") long orderLocalCacheMaxSize,
+                                      MeterRegistry meterRegistry) {
         RedisCacheManager redisCacheManager = buildRedisCacheManager(connectionFactory, orderCacheTtlSeconds);
         return new TieredCacheManager(
                 redisCacheManager,
                 Duration.ofSeconds(orderLocalCacheTtlSeconds),
-                orderLocalCacheMaxSize
+                orderLocalCacheMaxSize,
+                meterRegistry
         );
     }
 

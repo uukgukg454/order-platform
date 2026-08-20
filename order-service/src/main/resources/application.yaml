@@ -61,5 +61,34 @@ app:
     topics:
       orders-created: orders.created
 
+management:
+  endpoints:
+    web:
+      exposure:
+        # Verified against this exact Boot 4.1.0 jar's WebEndpointProperties
+        # class (@ConfigurationProperties("management.endpoints.web"),
+        # nested Exposure.include) rather than assumed from older Spring
+        # Boot versions — this property path turned out unchanged despite
+        # the internal package reshuffling elsewhere in this app (Kafka/
+        # Flyway/Redis autoconfigure all moved packages in Boot 4). health
+        # is exposed by default already; prometheus is not, so it's added
+        # here explicitly.
+        include: health, prometheus
+  metrics:
+    distribution:
+      percentiles-histogram:
+        # Enables Micrometer's _bucket series for this one metric, so
+        # Prometheus's histogram_quantile() can compute real p95/p99
+        # latency — the default _count/_sum/_max only support average and
+        # max, not arbitrary percentiles. Bracket notation is required
+        # here, not three levels of YAML nesting (http: server: requests:):
+        # percentiles-histogram binds to a Map<String, Boolean> keyed by
+        # the literal metric name "http.server.requests" (confirmed against
+        # this Boot 4.1.0 jar's MetricsProperties.Distribution class) —
+        # writing it as nested YAML would instead produce a Map with a
+        # nested "http"/"server"/"requests" structure, which is not what
+        # this property expects.
+        "[http.server.requests]": true
+
 server:
   port: 8080

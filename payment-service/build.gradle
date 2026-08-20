@@ -20,6 +20,11 @@ repositories {
 
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-web'
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	// No version — micrometer-registry-prometheus is BOM-managed via the
+	// micrometer-bom import in Spring Boot's own BOM, same nested-BOM
+	// mechanism as testcontainers-bom/mockito-bom elsewhere in this file.
+	implementation 'io.micrometer:micrometer-registry-prometheus'
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 	implementation 'org.springframework.boot:spring-boot-starter-flyway'

@@ -64,5 +64,24 @@ app:
       payments-completed: payments.completed
       payments-failed: payments.failed
 
+management:
+  endpoints:
+    web:
+      exposure:
+        # Verified against Boot 4.1.0's actual WebEndpointProperties class
+        # rather than assumed — see order-service's application.yaml for
+        # the full note. Same property path, unchanged from earlier Boot
+        # versions.
+        include: health, prometheus
+  metrics:
+    distribution:
+      percentiles-histogram:
+        # Enables Micrometer's _bucket series for this one metric — see
+        # order-service's application.yaml for the full note on why bracket
+        # notation ("[http.server.requests]") is required here rather than
+        # nested YAML: percentiles-histogram binds to a Map<String,Boolean>
+        # keyed by the literal metric name, not a nested property path.
+        "[http.server.requests]": true
+
 server:
   port: 8082

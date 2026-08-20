@@ -1,6 +1,7 @@
 package com.ujjwal.order_service.config;
 
 import com.github.benmanes.caffeine.cache.Caffeine;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.data.redis.cache.RedisCacheManager;
@@ -20,13 +21,16 @@ public class TieredCacheManager implements CacheManager {
     private final RedisCacheManager redisCacheManager;
     private final Duration localTtl;
     private final long localMaxSize;
+    private final MeterRegistry meterRegistry;
 
     private final ConcurrentHashMap<String, Cache> caches = new ConcurrentHashMap<>();
 
-    public TieredCacheManager(RedisCacheManager redisCacheManager, Duration localTtl, long localMaxSize) {
+    public TieredCacheManager(RedisCacheManager redisCacheManager, Duration localTtl, long localMaxSize,
+                               MeterRegistry meterRegistry) {
         this.redisCacheManager = redisCacheManager;
         this.localTtl = localTtl;
         this.localMaxSize = localMaxSize;
+        this.meterRegistry = meterRegistry;
     }
 
     // computeIfAbsent (build once, reuse forever) isn't just a
@@ -47,7 +51,7 @@ public class TieredCacheManager implements CacheManager {
                     .expireAfterWrite(localTtl)
                     .build();
             Cache redisCache = redisCacheManager.getCache(cacheName);
-            return new TieredCache(localCache, redisCache);
+            return new TieredCache(localCache, redisCache, meterRegistry);
         });
     }
 
