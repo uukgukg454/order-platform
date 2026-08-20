@@ -1,0 +1,68 @@
+spring:
+  application:
+    name: payment-service
+  datasource:
+    url: jdbc:postgresql://localhost:5434/payments
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      # Explicit per-service group-id, even with no @KafkaListener yet:
+      # this is what will make payment-service its own independent
+      # consumer group once one exists. Kafka's fan-out pattern splits a
+      # topic's partitions BETWEEN members of the SAME group, but gives
+      # every DIFFERENT group its own full copy of the stream — so as long
+      # as inventory-service and payment-service each have their own
+      # group-id (not a shared one), both see every event on
+      # orders.created independently, rather than splitting it between
+      # them.
+      group-id: payment-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: com.ujjwal.payment_service.event
+        spring.json.use.type.headers: false
+        spring.json.value.default.type: com.ujjwal.payment_service.event.OrderCreatedEvent
+    # Same producer config as order-service's: acks=all + idempotence so a
+    # publish is durably acknowledged by every in-sync replica and safe to
+    # retry on the driver's own transient-failure retries without risking a
+    # duplicate write to the log.
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+  data:
+    redis:
+      # Same local Redis order-service uses (order-redis) — reusing it is
+      # fine here because everything this service stores is namespaced
+      # ("payment-service:<orderId>" idempotency keys), not sharing key
+      # space or data with order-service's own cache/idempotency entries.
+      host: localhost
+      port: 6379
+
+app:
+  kafka:
+    topics:
+      orders-created: orders.created
+      # Created manually via kafka-topics.sh, not auto-created — see the
+      # listener/producer code that publishes to these.
+      payments-completed: payments.completed
+      payments-failed: payments.failed
+
+server:
+  port: 8082

@@ -1,1 +1,2 @@
-rootProject.name = 'order-service'
+rootProject.name = 'order-platform'
+include 'order-service', 'inventory-service', 'payment-service'

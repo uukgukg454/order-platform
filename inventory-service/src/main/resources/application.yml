@@ -1,0 +1,90 @@
+spring:
+  application:
+    name: inventory-service
+  datasource:
+    url: jdbc:postgresql://localhost:5433/inventory
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      # Explicit per-service group-id, even with no @KafkaListener yet:
+      # this is what will make inventory-service its own independent
+      # consumer group once one exists. Kafka's fan-out pattern splits a
+      # topic's partitions BETWEEN members of the SAME group, but gives
+      # every DIFFERENT group its own full copy of the stream — so as long
+      # as inventory-service and payment-service each have their own
+      # group-id (not a shared one), both see every event on
+      # orders.created independently, rather than splitting it between
+      # them.
+      group-id: inventory-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      # Wraps the real (delegate) deserializer below rather than replacing
+      # it: a raw deserialization failure (malformed JSON, a payload that
+      # doesn't match OrderCreatedEvent's shape) would otherwise throw
+      # inside the Kafka client itself, before Spring's listener/error-
+      # handling machinery ever sees it — killing the consumer thread
+      # instead of going through DefaultErrorHandler's retry/DLT path like
+      # a listener-thrown exception does. ErrorHandlingDeserializer catches
+      # that failure and hands it to the SAME error handler instead.
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      properties:
+        # The actual deserializer ErrorHandlingDeserializer delegates to —
+        # everything below is that delegate's own configuration, read the
+        # same way whether or not ErrorHandlingDeserializer is wrapping it.
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+        spring.json.trusted.packages: com.ujjwal.inventory_service.event
+        spring.json.use.type.headers: false
+        spring.json.value.default.type: com.ujjwal.inventory_service.event.OrderCreatedEvent
+    # Needed so DeadLetterPublishingRecoverer (see KafkaConsumerConfig) can
+    # actually publish to a .DLT topic: republishing a listener-thrown
+    # failure (as opposed to a raw deserialization failure) means
+    # re-serializing the already-deserialized event object, which needs a
+    # producer configured for that — this service had no producer config
+    # at all before, since until now it only ever consumed.
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+  data:
+    redis:
+      # Same local Redis order-service uses (order-redis) — reusing it is
+      # fine here because everything this service stores is namespaced
+      # ("inventory-service:<orderId>" idempotency keys, "stock:<productId>"
+      # lock keys), not sharing key space or data with order-service's own
+      # "orders::<uuid>" cache entries or "idempotency:" keys.
+      host: localhost
+      port: 6379
+  autoconfigure:
+    exclude:
+      # Broken against Spring Boot 4.1.0 for the same reason already found
+      # in order-service: it references a RedisProperties class at a
+      # package path that no longer exists in this Boot version. See
+      # RedissonConfig for the manual RedissonClient bean that replaces it.
+      - org.redisson.spring.starter.RedissonAutoConfigurationV2
+
+app:
+  kafka:
+    topics:
+      orders-created: orders.created
+      # Created manually via kafka-topics.sh, not auto-created — consumed
+      # by PaymentFailedEventListener to compensate (release stock) when
+      # payment-service declines a payment.
+      payments-failed: payments.failed
+
+server:
+  port: 8081

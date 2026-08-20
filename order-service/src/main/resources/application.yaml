@@ -1,0 +1,65 @@
+#spring:
+#  application:
+#    name: order-service
+#  jpa:
+#    hibernate:
+#      # Flyway owns the schema (db/migration); Hibernate only checks that
+#      # the entity mappings agree with it at startup and fails fast on
+#      # drift, instead of silently altering tables (update) or dropping
+#      # them (create/create-drop).
+#      ddl-auto: validate
+spring:
+  application:
+    name: order-service
+  datasource:
+    url: jdbc:postgresql://localhost:5432/orders
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 2000ms
+  autoconfigure:
+    exclude:
+      # Broken against Spring Boot 4.1.0: it references a RedisProperties
+      # class at a package path that no longer exists in this Boot version
+      # (org.springframework.boot.autoconfigure.data.redis.RedisProperties),
+      # so context refresh fails with ClassNotFoundException the moment this
+      # auto-configuration runs. Excluded explicitly here — not left to
+      # @ConditionalOnMissingBean to skip after the fact — so it's
+      # guaranteed to never even attempt to run. See RedissonConfig for the
+      # manual RedissonClient bean that replaces it.
+      - org.redisson.spring.starter.RedissonAutoConfigurationV2
+
+app:
+  cache:
+    order-ttl-seconds: 300
+    order-local-ttl-seconds: 30
+    order-local-max-size: 1000
+  kafka:
+    topics:
+      orders-created: orders.created
+
+server:
+  port: 8080

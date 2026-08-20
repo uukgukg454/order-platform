@@ -1,0 +1,98 @@
+plugins {
+	id 'java'
+	id 'jacoco'
+	id 'org.springframework.boot' version '4.1.0'
+	id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.ujjwal'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(21)
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+	implementation 'org.springframework.boot:spring-boot-starter-flyway'
+	implementation 'org.flywaydb:flyway-database-postgresql'
+	implementation 'org.springframework.boot:spring-boot-starter-validation'
+	implementation 'org.springframework.kafka:spring-kafka'
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+	// spring-kafka alone has no Spring Boot auto-configuration bundled in —
+	// Boot 4 split that into its own module, separate from the core library.
+	// order-service hit this directly: without spring-boot-kafka too, there
+	// is no KafkaTemplate bean (or, once a @KafkaListener exists here,
+	// no listener container factory) at all.
+	implementation 'org.springframework.boot:spring-boot-kafka'
+	// Redisson isn't part of Spring Boot's BOM, so its version has to be
+	// pinned explicitly — same version already verified against order-service
+	// (see that project's build.gradle/RedissonConfig): 3.50.0's own POM
+	// targets Spring Boot 3.5.0, not this project's 4.1.0, and its
+	// auto-configuration is broken here as a result. Same workaround reused
+	// rather than rediscovered — see spring.autoconfigure.exclude in
+	// application.yml and RedissonConfig for the exclusion and manual bean.
+	implementation 'org.redisson:redisson-spring-boot-starter:3.50.0'
+	runtimeOnly 'org.postgresql:postgresql'
+
+	// spring-boot-starter-web (unlike order-service's spring-boot-starter-
+	// webservices) has a straightforward test counterpart — no need for
+	// order-service's fragmented list of individual *-test starters plus
+	// manual resttestclient/restclient/mockito/assertj additions.
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	// Bridges Testcontainers container lifecycle into the Spring test context
+	// (@ServiceConnection support) — version comes from the Spring Boot BOM
+	// imported by the dependency-management plugin above.
+	testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+	// Testcontainers 2.x (pulled in via Spring Boot's testcontainers-bom)
+	// uses testcontainers-junit-jupiter/testcontainers-postgresql, not the
+	// old 1.x org.testcontainers:junit-jupiter/postgresql coordinates.
+	testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
+	testImplementation 'org.testcontainers:testcontainers-postgresql'
+	// Same 2.x renaming as the two above — org.testcontainers:kafka doesn't
+	// exist in this BOM, it's testcontainers-kafka. No Kafka integration
+	// test exists in this module yet; this just puts the dependency in
+	// place so AbstractIntegrationTest (and any test that extends it) has
+	// it available.
+	testImplementation 'org.testcontainers:testcontainers-kafka'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+	// AbstractIntegrationTest (testsupport/) exists so future tests have
+	// container isolation ready to extend, but nothing extends it yet in
+	// this module — an abstract class with no concrete subclass means
+	// zero discoverable tests, which Gradle otherwise treats as a build
+	// failure (assuming a misconfigured test task). That's a legitimate
+	// state here, not a misconfiguration, so the check is disabled until
+	// this module's first real test exists.
+	failOnNoDiscoveredTests = false
+	// Same fix as InventoryServiceApplication.main()'s
+	// TimeZone.setDefault(UTC), applied at the JVM level here because tests
+	// boot the Spring context directly and never go through main().
+	systemProperty 'user.timezone', 'UTC'
+	// Coverage data (build/jacoco/test.exec) is only useful once turned into
+	// a report, so generate it right after tests run instead of requiring a
+	// separate manual step.
+	finalizedBy jacocoTestReport
+}
+
+jacocoTestReport {
+	// jacocoTestReport reads the .exec file the test task just produced, so
+	// it must run after 'test', not merely be requested alongside it.
+	dependsOn test
+	reports {
+		html.required = true
+		xml.required = false
+		csv.required = false
+	}
+}
