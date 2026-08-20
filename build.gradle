@@ -1,102 +1,28 @@
-plugins {
-	id 'java'
-	id 'jacoco'
-	id 'org.springframework.boot' version '4.1.0'
-	id 'io.spring.dependency-management' version '1.1.7'
+// Root build.gradle for the order-platform multi-module build. Deliberately
+// minimal: only configuration meant to apply across every subproject lives
+// here (shared repositories, the shared Java toolchain version). Each
+// subproject's own dependencies, plugins, and build-specific config
+// (Spring Boot, Postgres, Redis, Redisson, ...) stay in that subproject's
+// own build.gradle — see order-service/build.gradle — rather than being
+// centralized here, so this file doesn't need to change every time a
+// subproject's dependency set does.
+
+allprojects {
+    repositories {
+        mavenCentral()
+    }
 }
 
-group = 'com.ujjwal'
-version = '0.0.1-SNAPSHOT'
-
-java {
-	toolchain {
-		languageVersion = JavaLanguageVersion.of(21)
-	}
-}
-
-repositories {
-	mavenCentral()
-}
-
-dependencies {
-	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
-	// L1 (in-JVM) layer for TieredCache — version comes from the Spring Boot
-	// BOM (caffeine.version), same as every other dependency here.
-	implementation 'com.github.ben-manes.caffeine:caffeine'
-	implementation 'org.springframework.boot:spring-boot-starter-flyway'
-	// Redisson isn't part of Spring Boot's BOM, so its version has to be
-	// pinned explicitly (unlike everything else in this file) — checked
-	// against Maven Central for the latest release rather than guessed.
-	// 3.50.0's own POM targets Spring Boot 3.5.0, not this project's 4.1.0,
-	// and its auto-configuration is confirmed broken here as a result — see
-	// the spring.autoconfigure.exclude entry in application.yaml and
-	// RedissonConfig for the exclusion and manual bean that work around it.
-	implementation 'org.redisson:redisson-spring-boot-starter:3.50.0'
-	// RedisConfig imports Jackson directly (ObjectMapper + JavaTimeModule) to
-	// build the RedisTemplate's value serializer. Jackson only reaches this
-	// app transitively at runtime via spring-boot-starter-webservices (this
-	// project has no spring-boot-starter-web/-json), so it isn't visible to
-	// main's compile classpath without declaring it explicitly here — version
-	// still comes from Spring Boot's BOM (jackson-bom import), not hardcoded.
-	implementation 'com.fasterxml.jackson.core:jackson-databind'
-	implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
-	implementation 'org.springframework.boot:spring-boot-starter-validation'
-	implementation 'org.springframework.boot:spring-boot-starter-webservices'
-	implementation 'org.flywaydb:flyway-database-postgresql'
-	runtimeOnly 'org.postgresql:postgresql'
-	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
-	testImplementation 'org.springframework.boot:spring-boot-starter-flyway-test'
-	testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'
-	testImplementation 'org.springframework.boot:spring-boot-starter-webservices-test'
-	// Bridges Testcontainers container lifecycle into the Spring test context
-	// (@ServiceConnection support) — version comes from the Spring Boot BOM
-	// imported by the dependency-management plugin above, so it always
-	// matches this Boot release rather than needing to be pinned by hand.
-	testImplementation 'org.springframework.boot:spring-boot-testcontainers'
-	// Testcontainers 2.x (pulled in via Spring Boot's testcontainers-bom)
-	// renamed these module artifacts from junit-jupiter/postgresql to
-	// testcontainers-junit-jupiter/testcontainers-postgresql — the old 1.x
-	// coordinates aren't in the 2.x BOM at all.
-	testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
-	testImplementation 'org.testcontainers:testcontainers-postgresql'
-	testImplementation 'org.assertj:assertj-core'
-	// Spring Boot 4 moved TestRestTemplate out of spring-boot-test into its
-	// own module, which in turn needs RestTemplateBuilder from
-	// spring-boot-restclient (not pulled in transitively).
-	testImplementation 'org.springframework.boot:spring-boot-resttestclient'
-	testImplementation 'org.springframework.boot:spring-boot-restclient'
-	// Mockito for pure unit tests (OrderServiceTest) that mock OrderRepository
-	// directly instead of going through a Spring context or a real database.
-	// Version comes from mockito-bom, imported transitively by the Spring
-	// Boot BOM, same mechanism as the Testcontainers versions above.
-	testImplementation 'org.mockito:mockito-core'
-	testImplementation 'org.mockito:mockito-junit-jupiter'
-	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-}
-
-tasks.named('test') {
-	useJUnitPlatform()
-	// Same fix as OrderServiceApplication.main()'s TimeZone.setDefault(UTC),
-	// applied at the JVM level here because tests boot the Spring context
-	// directly and never go through main() — without this, the JVM's
-	// Windows-default "Asia/Calcutta" id gets sent as a Postgres connection
-	// parameter and every container the server doesn't recognize it (e.g.
-	// the plain postgres:16 image) rejects the connection outright.
-	systemProperty 'user.timezone', 'UTC'
-	// Coverage data (build/jacoco/test.exec) is only useful once turned into
-	// a report, so generate it right after tests run instead of requiring a
-	// separate manual step.
-	finalizedBy jacocoTestReport
-}
-
-jacocoTestReport {
-	// jacocoTestReport reads the .exec file the test task just produced, so
-	// it must run after 'test', not merely be requested alongside it.
-	dependsOn test
-	reports {
-		html.required = true
-		xml.required = false
-		csv.required = false
-	}
+// plugins.withId(...) rather than forcing 'java' onto every subproject:
+// this only configures the toolchain for subprojects that already apply
+// the java plugin themselves (order-service does), so a future non-Java
+// subproject wouldn't be affected by this block at all.
+subprojects {
+    plugins.withId('java') {
+        java {
+            toolchain {
+                languageVersion = JavaLanguageVersion.of(21)
+            }
+        }
+    }
 }
