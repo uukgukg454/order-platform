@@ -1,5 +1,7 @@
 package com.ujjwal.order_service.config;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.cache.Cache;
 import org.springframework.cache.support.SimpleValueWrapper;
 
@@ -25,10 +27,45 @@ public class TieredCache implements Cache {
 
     private final com.github.benmanes.caffeine.cache.Cache<Object, Object> localCache;
     private final Cache delegate;
+    private final Counter l1HitCounter;
+    private final Counter l2HitCounter;
+    private final Counter missCounter;
 
-    public TieredCache(com.github.benmanes.caffeine.cache.Cache<Object, Object> localCache, Cache delegate) {
+    /**
+     * Hand-rolled hit/miss metrics: Spring Boot's automatic cache-metrics
+     * binder (CacheMetricsRegistrar) only instruments CacheManager/Cache
+     * implementations it knows how to introspect — Caffeine, Redis,
+     * ConcurrentMap, a handful of others — by reaching into their
+     * native stats objects. A custom Cache like this one isn't on that
+     * list, so nothing gets registered for it automatically; without this
+     * constructor doing it explicitly, TieredCache would be invisible to
+     * /actuator/prometheus entirely.
+     *
+     * Tagged "cache" = the cache's own name (matching the tag key Spring's
+     * own built-in cache metrics use, for consistency), so multiple caches
+     * remain distinguishable in Prometheus if more are added later.
+     */
+    public TieredCache(com.github.benmanes.caffeine.cache.Cache<Object, Object> localCache,
+                        Cache delegate,
+                        MeterRegistry meterRegistry) {
         this.localCache = localCache;
         this.delegate = delegate;
+
+        String cacheName = delegate.getName();
+        this.l1HitCounter = Counter.builder("app.cache.hits")
+                .tag("cache", cacheName)
+                .tag("tier", "L1")
+                .description("Cache reads served from the local Caffeine (L1) tier, without touching L2")
+                .register(meterRegistry);
+        this.l2HitCounter = Counter.builder("app.cache.hits")
+                .tag("cache", cacheName)
+                .tag("tier", "L2")
+                .description("Cache reads that missed L1 but were found in the Redis (L2) tier")
+                .register(meterRegistry);
+        this.missCounter = Counter.builder("app.cache.misses")
+                .tag("cache", cacheName)
+                .description("Cache reads found in neither the L1 nor the L2 tier")
+                .register(meterRegistry);
     }
 
     @Override
@@ -47,6 +84,7 @@ public class TieredCache implements Cache {
         if (localValue != null) {
             // Local hit: return directly, no call to the L2 delegate at all
             // — this is the entire point of having an L1 in front of Redis.
+            l1HitCounter.increment();
             return new SimpleValueWrapper(localValue);
         }
 
@@ -55,7 +93,10 @@ public class TieredCache implements Cache {
             // Local miss, remote hit: backfill L1 so the next read for this
             // key on this instance is a pure local hit instead of another
             // round trip to Redis.
+            l2HitCounter.increment();
             localCache.put(key, remoteValue.get());
+        } else {
+            missCounter.increment();
         }
         return remoteValue;
     }
@@ -70,6 +111,16 @@ public class TieredCache implements Cache {
     @Override
     @SuppressWarnings("unchecked")
     public <T> T get(Object key, Callable<T> valueLoader) {
+        // Deliberately not instrumented the same way as the two overloads
+        // above: Cache.get(key, Callable) has compute-if-absent semantics
+        // — a "miss" here doesn't return null the way a plain get() miss
+        // does, it runs valueLoader and returns the freshly computed
+        // value instead. Counting that as an "L2 hit" would misrepresent
+        // what actually happened (L2 may have missed too), so this path is
+        // left out of the hit/miss counters rather than recorded
+        // inaccurately. In practice this overload isn't exercised by this
+        // app anyway — @Cacheable defaults to sync=false, which uses the
+        // plain get(key) above.
         Object localValue = localCache.getIfPresent(key);
         if (localValue != null) {
             return (T) localValue;
