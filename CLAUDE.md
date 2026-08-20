@@ -9,3 +9,8 @@ Hands-on learning project — Java 21 + Spring Boot distributed order-processing
 - After each increment, briefly summarize what was added and why, then stop and wait for confirmation before continuing to the next piece.
 - Do not refactor unrelated code or add scope beyond what was asked.
 - When there's a real design trade-off (cache-aside vs write-through, at-least-once vs exactly-once, etc.), explain the options rather than silently picking one.
+
+## Pacing (added after Phase 2 caching work)
+
+- For well-understood, low-risk work — things following a pattern already established and reviewed earlier in this project, straightforward config, CRUD-style code — batch multiple closely-related files into one increment instead of one class at a time. Passing `./gradlew build`/`test` is sufficient proof; exhaustive manual Postman/redis-cli verification of every case is no longer required by default.
+- Reserve the original slow pace (one piece at a time, full explanation, hands-on verification of each step) specifically for genuinely new distributed-systems concepts — Kafka consumer-group/rebalance/offset mechanics in Phase 3, and Kubernetes scheduling/networking concepts in Phase 8 are the two known ones ahead. Deep understanding there is worth the extra time; it's exactly what's likely to get probed hard in an interview.

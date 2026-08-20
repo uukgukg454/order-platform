@@ -25,6 +25,14 @@ dependencies {
 	// BOM (caffeine.version), same as every other dependency here.
 	implementation 'com.github.ben-manes.caffeine:caffeine'
 	implementation 'org.springframework.boot:spring-boot-starter-flyway'
+	// Redisson isn't part of Spring Boot's BOM, so its version has to be
+	// pinned explicitly (unlike everything else in this file) — checked
+	// against Maven Central for the latest release rather than guessed.
+	// 3.50.0's own POM targets Spring Boot 3.5.0, not this project's 4.1.0,
+	// and its auto-configuration is confirmed broken here as a result — see
+	// the spring.autoconfigure.exclude entry in application.yaml and
+	// RedissonConfig for the exclusion and manual bean that work around it.
+	implementation 'org.redisson:redisson-spring-boot-starter:3.50.0'
 	// RedisConfig imports Jackson directly (ObjectMapper + JavaTimeModule) to
 	// build the RedisTemplate's value serializer. Jackson only reaches this
 	// app transitively at runtime via spring-boot-starter-webservices (this

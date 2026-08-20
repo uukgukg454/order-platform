@@ -2,18 +2,24 @@ package com.ujjwal.order_service.controller;
 
 import com.ujjwal.order_service.dto.request.CreateOrderRequest;
 import com.ujjwal.order_service.dto.request.OrderItemRequest;
+import com.ujjwal.order_service.dto.request.UpdateOrderStatusRequest;
 import com.ujjwal.order_service.dto.response.OrderResponse;
+import com.ujjwal.order_service.entity.OrderStatus;
 import com.ujjwal.order_service.exception.ErrorResponse;
+import com.ujjwal.order_service.repository.OrderRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.resttestclient.TestRestTemplate;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -24,6 +30,8 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 /**
  * End-to-end test: real HTTP calls through the full stack (controller,
@@ -87,6 +95,19 @@ class OrderControllerIntegrationTest {
     // the test server started on, so requests below use relative paths.
     @Autowired
     private TestRestTemplate restTemplate;
+
+    // Wraps the REAL OrderRepository bean in a Mockito spy — calls still go
+    // through to the actual Postgres container, but every invocation is
+    // also recorded so tests below can assert on how many times (or
+    // whether at all) the repository was actually touched, to prove
+    // @Cacheable / @CacheEvict are doing what they claim rather than just
+    // asserting on response bodies. MockitoSpyBean (spring-test, part of
+    // Spring Framework itself) is this Spring Boot version's current bean
+    // override mechanism for this — the older
+    // org.springframework.boot.test.mock.mockito.SpyBean it replaced no
+    // longer exists in this Boot/Framework version.
+    @MockitoSpyBean
+    private OrderRepository orderRepository;
 
     @Test
     void createOrder_returnsCreatedWithLocationAndServerComputedTotal() {
@@ -165,5 +186,69 @@ class OrderControllerIntegrationTest {
         assertThat(body).isNotNull();
         assertThat(body.status()).isEqualTo(400);
         assertThat(body.message()).contains("customerId");
+    }
+
+    @Test
+    void getOrder_secondCallForSameId_isServedFromCache_repositoryInvokedOnce() {
+        CreateOrderRequest request = new CreateOrderRequest(
+                UUID.randomUUID(),
+                "USD",
+                List.of(new OrderItemRequest(UUID.randomUUID(), "Widget", new BigDecimal("10.00"), 1))
+        );
+        ResponseEntity<OrderResponse> created = restTemplate.postForEntity("/orders", request, OrderResponse.class);
+        UUID orderId = created.getBody().id();
+
+        ResponseEntity<OrderResponse> firstGet = restTemplate.getForEntity("/orders/{id}", OrderResponse.class, orderId);
+        ResponseEntity<OrderResponse> secondGet = restTemplate.getForEntity("/orders/{id}", OrderResponse.class, orderId);
+
+        assertThat(firstGet.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(secondGet.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(secondGet.getBody()).isEqualTo(firstGet.getBody());
+
+        // @Cacheable("orders") means only the first getOrder call should
+        // ever reach the repository — the second is served straight from
+        // TieredCache (Caffeine L1, or Redis L2 on an L1 miss) without
+        // touching Postgres at all.
+        verify(orderRepository, times(1)).findByIdWithItems(orderId);
+    }
+
+    @Test
+    void getOrder_afterStatusUpdate_cacheEvicted_repositoryReflectsRealRefetch() {
+        CreateOrderRequest request = new CreateOrderRequest(
+                UUID.randomUUID(),
+                "USD",
+                List.of(new OrderItemRequest(UUID.randomUUID(), "Widget", new BigDecimal("10.00"), 1))
+        );
+        ResponseEntity<OrderResponse> created = restTemplate.postForEntity("/orders", request, OrderResponse.class);
+        UUID orderId = created.getBody().id();
+
+        // Populates the cache — first repository hit.
+        restTemplate.getForEntity("/orders/{id}", OrderResponse.class, orderId);
+        verify(orderRepository, times(1)).findByIdWithItems(orderId);
+
+        // updateOrderStatus loads the entity via this same findByIdWithItems
+        // query too (see OrderService — it needs the managed entity to
+        // mutate, independently of caching), so this PATCH is itself a
+        // second invocation, on top of whatever @CacheEvict does. That's
+        // why the running total below goes to 2 here, not because eviction
+        // caused a second fetch — eviction happens AFTER this method
+        // returns and doesn't touch the repository at all.
+        UpdateOrderStatusRequest statusUpdate = new UpdateOrderStatusRequest(OrderStatus.PAID);
+        ResponseEntity<OrderResponse> patchResponse = restTemplate.exchange(
+                "/orders/{id}/status", HttpMethod.PATCH, new HttpEntity<>(statusUpdate), OrderResponse.class, orderId);
+        assertThat(patchResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(patchResponse.getBody().status()).isEqualTo(OrderStatus.PAID);
+        verify(orderRepository, times(2)).findByIdWithItems(orderId);
+
+        // The real proof of eviction: if the "orders" cache entry for this
+        // id were still populated from the first GET, this call would be
+        // served from cache and the invocation count below would stay at
+        // 2. Instead @CacheEvict cleared it when updateOrderStatus
+        // committed, so this GET has to reach the repository again — the
+        // count advances to 3, and the returned status reflects the write.
+        ResponseEntity<OrderResponse> afterUpdateGet = restTemplate.getForEntity("/orders/{id}", OrderResponse.class, orderId);
+        assertThat(afterUpdateGet.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(afterUpdateGet.getBody().status()).isEqualTo(OrderStatus.PAID);
+        verify(orderRepository, times(3)).findByIdWithItems(orderId);
     }
 }
