@@ -41,6 +41,13 @@ import static org.mockito.Mockito.when;
  * translation), none of which requires Hibernate, Flyway, or a real
  * connection to prove — going through a database would only make the tests
  * slower and couple them to schema/container concerns they don't care about.
+ *
+ * getOrder's @Cacheable and updateOrderStatus's @CacheEvict are Spring AOP
+ * proxy behavior — with no ApplicationContext here, there's no proxy, so
+ * these tests are exercising the annotated methods' plain Java bodies only,
+ * the same as calling any other method on this class. Caching behavior
+ * itself is covered by OrderControllerIntegrationTest instead, where a real
+ * Spring context (and a real Redis) is actually in play.
  */
 @ExtendWith(MockitoExtension.class)
 class OrderServiceTest {

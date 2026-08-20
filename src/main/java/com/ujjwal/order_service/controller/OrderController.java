@@ -1,6 +1,7 @@
 package com.ujjwal.order_service.controller;
 
 import com.ujjwal.order_service.dto.request.CreateOrderRequest;
+import com.ujjwal.order_service.dto.request.UpdateOrderStatusRequest;
 import com.ujjwal.order_service.dto.response.OrderResponse;
 import com.ujjwal.order_service.service.OrderService;
 import jakarta.validation.Valid;
@@ -9,6 +10,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -60,5 +62,14 @@ public class OrderController {
         int cappedSize = Math.min(size, MAX_PAGE_SIZE);
         Pageable pageable = PageRequest.of(page, cappedSize);
         return ResponseEntity.ok(orderService.listOrdersByCustomer(customerId, pageable));
+    }
+
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<OrderResponse> updateOrderStatus(@PathVariable UUID id,
+                                                             @Valid @RequestBody UpdateOrderStatusRequest request) {
+        // Not-found and validation failures both fall through to
+        // GlobalExceptionHandler exactly as they do for the other endpoints
+        // above — nothing endpoint-specific needed here.
+        return ResponseEntity.ok(orderService.updateOrderStatus(id, request.status()));
     }
 }
