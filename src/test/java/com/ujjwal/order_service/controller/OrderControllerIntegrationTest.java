@@ -12,6 +12,9 @@ import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRe
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -57,6 +60,28 @@ class OrderControllerIntegrationTest {
     // actually runs, so tests validate against the same major version and
     // base image the app is really deployed/run against.
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16");
+
+    // getOrder is now @Cacheable (see OrderService), so a live Redis is
+    // required for this context to start at all, same as Postgres above —
+    // matches the "redis:7-alpine" image the dev container (order-redis)
+    // actually runs.
+    @Container
+    static GenericContainer<?> redis = new GenericContainer<>("redis:7-alpine")
+            .withExposedPorts(6379);
+
+    // No @ServiceConnection here: unlike Postgres, spring-boot-testcontainers
+    // in this Boot version ships no built-in connection-details factory for
+    // Redis — there's no auto-detecting recognition of a Redis container the
+    // way there is for Postgres, MySQL, Kafka, etc. So the connection has to
+    // be wired by hand: register spring.data.redis.host/port to point at
+    // wherever Testcontainers actually mapped the container's 6379 to on the
+    // host, before the Spring context reads those properties to build its
+    // RedisConnectionFactory.
+    @DynamicPropertySource
+    static void redisProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.data.redis.host", redis::getHost);
+        registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
+    }
 
     // Spring Boot auto-configures this bean, pre-bound to the random port
     // the test server started on, so requests below use relative paths.

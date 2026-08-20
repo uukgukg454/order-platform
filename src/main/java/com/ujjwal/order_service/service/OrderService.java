@@ -5,8 +5,11 @@ import com.ujjwal.order_service.dto.response.OrderItemResponse;
 import com.ujjwal.order_service.dto.response.OrderResponse;
 import com.ujjwal.order_service.entity.Order;
 import com.ujjwal.order_service.entity.OrderItem;
+import com.ujjwal.order_service.entity.OrderStatus;
 import com.ujjwal.order_service.exception.OrderNotFoundException;
 import com.ujjwal.order_service.repository.OrderRepository;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -56,6 +59,12 @@ public class OrderService {
         return toResponse(saved);
     }
 
+    // Replaces the manual cache GET-check / DB-fallback / SET block that
+    // used to live directly in this method: Spring's caching abstraction
+    // now checks the "orders" cache for key #id first and returns that on a
+    // hit, only running the method body (and caching its return value) on a
+    // miss — same read-through behavior, declared instead of hand-written.
+    @Cacheable(value = "orders", key = "#id")
     @Transactional(readOnly = true)
     public OrderResponse getOrder(UUID id) {
         Order order = orderRepository.findByIdWithItems(id)
@@ -67,6 +76,23 @@ public class OrderService {
     public Page<OrderResponse> listOrdersByCustomer(UUID customerId, Pageable pageable) {
         return orderRepository.findByCustomerId(customerId, pageable)
                 .map(this::toSummaryResponse);
+    }
+
+    // beforeInvocation defaults to false, so Spring evicts the "orders"
+    // cache entry for this id only after this method — and the save()
+    // inside it — completes successfully. Evicting up front (beforeInvocation
+    // = true) would open a window where a concurrent getOrder(id) repopulates
+    // the cache with the still-old status before this write actually
+    // commits, leaving stale data cached even though the eviction already
+    // "happened".
+    @CacheEvict(value = "orders", key = "#id")
+    @Transactional
+    public OrderResponse updateOrderStatus(UUID id, OrderStatus newStatus) {
+        Order order = orderRepository.findByIdWithItems(id)
+                .orElseThrow(() -> new OrderNotFoundException(id));
+        order.setStatus(newStatus);
+        Order saved = orderRepository.save(order);
+        return toResponse(saved);
     }
 
     private OrderResponse toResponse(Order order) {

@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -35,6 +36,25 @@ public class GlobalExceptionHandler {
                 .map(fieldError -> fieldError.getField() + ": " + fieldError.getDefaultMessage())
                 .collect(Collectors.joining("; "));
         return build(HttpStatus.BAD_REQUEST, message, request);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleMalformedRequestBody(HttpMessageNotReadableException ex,
+                                                                       HttpServletRequest request) {
+        // 400: the request body couldn't even be turned into an object in
+        // the first place — either genuinely malformed JSON, or, as hit
+        // here, a JSON string value that doesn't match any constant of a
+        // target enum (e.g. status: "SHIPPED" against OrderStatus, which
+        // only has CREATED/PAYMENT_PENDING/PAID/PAYMENT_FAILED/CANCELLED).
+        // Jackson raises its own InvalidFormatException for that, which
+        // Spring's HttpMessageConverter layer wraps in this
+        // HttpMessageNotReadableException before it ever reaches the
+        // controller — @Valid never runs, because there's no bound object
+        // yet to validate. Either way this is a client error, not a server
+        // one: the client sent something that isn't valid input, so it
+        // belongs at 400 alongside MethodArgumentNotValidException rather
+        // than falling through to the generic 500 catch-all below.
+        return build(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
     }
 
     @ExceptionHandler(Exception.class)
