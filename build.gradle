@@ -1,0 +1,82 @@
+plugins {
+	id 'java'
+	id 'jacoco'
+	id 'org.springframework.boot' version '4.1.0'
+	id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.ujjwal'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(21)
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	implementation 'org.springframework.boot:spring-boot-starter-flyway'
+	implementation 'org.springframework.boot:spring-boot-starter-validation'
+	implementation 'org.springframework.boot:spring-boot-starter-webservices'
+	implementation 'org.flywaydb:flyway-database-postgresql'
+	runtimeOnly 'org.postgresql:postgresql'
+	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-flyway-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-webservices-test'
+	// Bridges Testcontainers container lifecycle into the Spring test context
+	// (@ServiceConnection support) — version comes from the Spring Boot BOM
+	// imported by the dependency-management plugin above, so it always
+	// matches this Boot release rather than needing to be pinned by hand.
+	testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+	// Testcontainers 2.x (pulled in via Spring Boot's testcontainers-bom)
+	// renamed these module artifacts from junit-jupiter/postgresql to
+	// testcontainers-junit-jupiter/testcontainers-postgresql — the old 1.x
+	// coordinates aren't in the 2.x BOM at all.
+	testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
+	testImplementation 'org.testcontainers:testcontainers-postgresql'
+	testImplementation 'org.assertj:assertj-core'
+	// Spring Boot 4 moved TestRestTemplate out of spring-boot-test into its
+	// own module, which in turn needs RestTemplateBuilder from
+	// spring-boot-restclient (not pulled in transitively).
+	testImplementation 'org.springframework.boot:spring-boot-resttestclient'
+	testImplementation 'org.springframework.boot:spring-boot-restclient'
+	// Mockito for pure unit tests (OrderServiceTest) that mock OrderRepository
+	// directly instead of going through a Spring context or a real database.
+	// Version comes from mockito-bom, imported transitively by the Spring
+	// Boot BOM, same mechanism as the Testcontainers versions above.
+	testImplementation 'org.mockito:mockito-core'
+	testImplementation 'org.mockito:mockito-junit-jupiter'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+	// Same fix as OrderServiceApplication.main()'s TimeZone.setDefault(UTC),
+	// applied at the JVM level here because tests boot the Spring context
+	// directly and never go through main() — without this, the JVM's
+	// Windows-default "Asia/Calcutta" id gets sent as a Postgres connection
+	// parameter and every container the server doesn't recognize it (e.g.
+	// the plain postgres:16 image) rejects the connection outright.
+	systemProperty 'user.timezone', 'UTC'
+	// Coverage data (build/jacoco/test.exec) is only useful once turned into
+	// a report, so generate it right after tests run instead of requiring a
+	// separate manual step.
+	finalizedBy jacocoTestReport
+}
+
+jacocoTestReport {
+	// jacocoTestReport reads the .exec file the test task just produced, so
+	// it must run after 'test', not merely be requested alongside it.
+	dependsOn test
+	reports {
+		html.required = true
+		xml.required = false
+		csv.required = false
+	}
+}
