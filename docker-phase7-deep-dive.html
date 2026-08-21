@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Phase 7 Deep Dive — Containerizing order-platform</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --text: #1b1f24;
+    --text-dim: #4b5563;
+    --bg: #ffffff;
+    --bg-alt: #f6f7f9;
+    --border: #d9dce1;
+    --code-bg: #f2f3f5;
+    --accent: #2354a6;
+    --accent-soft: #e8eefb;
+    --warn-bg: #fff7e6;
+    --warn-border: #e0a72c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    line-height: 1.65;
+    margin: 0;
+    padding: 0;
+  }
+  .wrap {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 48px 28px 120px;
+  }
+  header.title {
+    border-bottom: 3px solid var(--accent);
+    padding-bottom: 24px;
+    margin-bottom: 32px;
+  }
+  header.title .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+  header.title h1 {
+    font-size: 2rem;
+    margin: 0 0 10px;
+    line-height: 1.25;
+  }
+  header.title p.sub {
+    color: var(--text-dim);
+    font-size: 1.02rem;
+    margin: 0;
+    max-width: 68ch;
+  }
+  nav.toc {
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 22px;
+    margin-bottom: 44px;
+    font-size: 0.92rem;
+  }
+  nav.toc div.label {
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+  nav.toc ol { margin: 0; padding-left: 20px; }
+  nav.toc li { margin: 3px 0; }
+  nav.toc a { color: var(--accent); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+
+  section { margin-bottom: 56px; scroll-margin-top: 16px; }
+  h2 {
+    font-size: 1.55rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 10px;
+    margin-top: 0;
+    scroll-margin-top: 16px;
+  }
+  h3 {
+    font-size: 1.18rem;
+    margin-top: 34px;
+    color: var(--text);
+    scroll-margin-top: 16px;
+  }
+  h4 {
+    font-size: 1.0rem;
+    margin-top: 24px;
+    margin-bottom: 8px;
+  }
+  p { max-width: 76ch; }
+  p.wide, div.wide { max-width: none; }
+
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    margin: 12px 0 18px;
+  }
+  code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+  p code, li code {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: 0.88em;
+  }
+  .filetag {
+    display: inline-block;
+    font-family: Consolas, monospace;
+    font-size: 0.76rem;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-radius: 4px;
+    padding: 2px 8px;
+    margin-bottom: 6px;
+  }
+  table.linebyline {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0 24px;
+    font-size: 0.92rem;
+  }
+  table.linebyline th, table.linebyline td {
+    text-align: left;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    vertical-align: top;
+  }
+  table.linebyline th {
+    background: var(--bg-alt);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-dim);
+  }
+  table.linebyline td.code {
+    font-family: Consolas, monospace;
+    font-size: 0.82rem;
+    white-space: pre-wrap;
+    background: var(--code-bg);
+    width: 30%;
+  }
+  .callout {
+    background: var(--warn-bg);
+    border: 1px solid var(--warn-border);
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin: 16px 0;
+    font-size: 0.92rem;
+  }
+  .callout .label {
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.05em;
+    display: block;
+    margin-bottom: 4px;
+    color: #7a5310;
+  }
+  .diagram-wrap {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px;
+    background: var(--bg-alt);
+    overflow-x: auto;
+    margin: 16px 0 8px;
+  }
+  .diagram-caption {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    margin-top: 6px;
+    margin-bottom: 28px;
+  }
+  hr.rule { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+  footer {
+    margin-top: 60px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    font-size: 0.82rem;
+    color: var(--text-dim);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="title">
+  <div class="eyebrow">order-platform &middot; Phase 7 study reference</div>
+  <h1>Containerizing order-platform: the four Dockerfiles and docker-compose.yml, in depth</h1>
+  <p class="sub">Every explanation below is grounded in the actual files in this repository — real lines, real container names, real ports. Written as an interview-prep reference, including the parts that aren't fully optimized yet.</p>
+</header>
+
+<nav class="toc">
+  <div class="label">Contents</div>
+  <ol>
+    <li><a href="#why">Why these files exist at all</a></li>
+    <li><a href="#dockerfile">The Dockerfile, line by line</a></li>
+    <li><a href="#compose">docker-compose.yml, section by section</a></li>
+    <li><a href="#diagrams">Two diagrams</a></li>
+    <li><a href="#achieved">What we actually achieved</a></li>
+  </ol>
+</nav>
+
+<!-- ============ SECTION 1 ============ -->
+<section id="why">
+<h2>1. Why these files exist at all</h2>
+
+<p class="wide">Before Phase 7, this project ran as two completely different kinds of things, glued together only by shared knowledge of ports and hostnames. The four Spring Boot services — order-service, inventory-service, payment-service, search-indexer-service — ran as <strong>host processes</strong>, started with <code>./gradlew :order-service:bootRun</code> (and the equivalent for each other module) directly on the developer's machine. Every piece of infrastructure they depended on — three Postgres databases, Redis, Kafka, Elasticsearch, Kibana, Logstash, Filebeat, Prometheus, Grafana, Kafka UI — ran as a <strong>Docker container</strong>, but each one started by its own individual, one-off <code>docker run</code> command, typed by hand, existing nowhere as a reviewable file.</p>
+
+<p class="wide">That second half was the real liability. Nothing in the repository said what image version each infra piece used, what environment variables it needed, what ports it published, or what order things had to start in. This actually bit the project directly: earlier in this same effort, fixing a Logstash index-naming bug required manually running <code>docker rm -f order-logstash</code> and then manually re-typing the same <code>docker run</code> command from memory to pick up a config change — a workflow that only works as long as whoever's doing it remembers the exact flags, and that leaves zero trace in git of what was actually running. A second developer pulling this repo fresh would have no way to reconstruct the same environment without asking someone.</p>
+
+<p class="wide">Containerizing the four Spring Boot services and writing <code>docker-compose.yml</code> solves three separate problems at once:</p>
+
+<ul>
+  <li><strong>Reproducibility.</strong> The entire 15-container system — every infra piece and every app service — is now declared in one file. <code>docker compose up -d --build</code> from a clean checkout reconstructs it exactly, with no tribal knowledge required.</li>
+  <li><strong>Environment parity.</strong> Once order-service runs inside <code>eclipse-temurin:21-jre</code>, it no longer matters what JDK version (or whether any JDK at all) is installed on the host machine running it. The image carries its own runtime.</li>
+  <li><strong>It's the direct prerequisite for Phase 8.</strong> Kubernetes deploys container images — it has no concept of "SSH into a box and run <code>gradlew bootRun</code>." Without a real, standalone, runnable image for each service, there is nothing for a future Kubernetes Deployment's <code>image:</code> field to point at. This is covered in depth in <a href="#achieved">§5</a>.</li>
+</ul>
+
+<p class="wide">Concretely, the shift also changes how each service reaches its dependencies. Before Phase 7, order-service (a host process) talked to Postgres via <code>localhost:5432</code> — that address is order-service's own machine's loopback interface, reachable only because Postgres's container published port 5432 to that same host. After Phase 7, order-service <em>is itself a container</em> on the same Docker network as order-postgres, and it addresses it by container name — <code>order-postgres:5432</code> — never touching <code>localhost</code> at all. This is exactly what the project's <code>application-docker.yml</code> profile files (added in the step before this one) exist to express, and it's covered in detail in <a href="#compose">§3</a>.</p>
+</section>
+
+<!-- ============ SECTION 2 ============ -->
+<section id="dockerfile">
+<h2>2. The Dockerfile, line by line</h2>
+
+<p>All four Dockerfiles are structurally identical — same two stages, same base images, same instruction order — differing only in the module name, the copied <code>src/</code> directory, and the <code>EXPOSE</code>d port. <code>order-service/Dockerfile</code> is used as the walkthrough; differences in the other three are called out where they occur.</p>
+
+<div class="filetag">order-service/Dockerfile</div>
+<pre><code># Build context MUST be the repo root (order-platform), not this module's
+# own directory — e.g. from the repo root:
+#   docker build -f order-service/Dockerfile -t order-service .
+# This is a multi-module Gradle build: settings.gradle declares all four
+# subprojects, and Gradle's configuration phase evaluates every declared
+# subproject's build.gradle even when only one subproject's task is
+# requested (":order-service:bootJar" below) — so gradlew, the root
+# settings.gradle/build.gradle, and every subproject's own build.gradle need
+# to be present in the build context, not just this module's own files.
+# Only order-service's actual src/ is copied, though: this project's
+# no-shared-module architecture means no subproject's compileJava/bootJar
+# task ever reads another subproject's source.
+
+FROM eclipse-temurin:21-jdk AS build
+WORKDIR /workspace
+
+COPY gradlew .
+COPY gradle gradle
+COPY settings.gradle build.gradle ./
+COPY order-service/build.gradle order-service/build.gradle
+COPY inventory-service/build.gradle inventory-service/build.gradle
+COPY payment-service/build.gradle payment-service/build.gradle
+COPY search-indexer-service/build.gradle search-indexer-service/build.gradle
+COPY order-service/src order-service/src
+
+RUN chmod +x gradlew && ./gradlew :order-service:bootJar --no-daemon
+
+FROM eclipse-temurin:21-jre
+WORKDIR /app
+COPY --from=build /workspace/order-service/build/libs/*.jar app.jar
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "app.jar"]</code></pre>
+
+<h3>Why a multi-stage build</h3>
+<p class="wide"><code>FROM eclipse-temurin:21-jdk AS build</code> starts the first stage, named <code>build</code>, on a full JDK image — javac, jshell, the whole toolchain. <code>FROM eclipse-temurin:21-jre</code> (no <code>AS</code>, so this becomes the <em>final</em> stage) starts completely fresh on a JRE-only image — no compiler, no build tools, nothing that isn't needed to actually <em>run</em> a compiled jar. Only one instruction bridges the two: <code>COPY --from=build ... *.jar app.jar</code>, which reaches back into the build stage's filesystem and pulls across exactly one file.</p>
+<p class="wide">Everything else stage 1 produced or downloaded — the JDK itself, the Gradle wrapper's downloaded distribution, the full Maven-Central dependency cache under <code>~/.gradle</code>, the entire <code>order-service/src</code> tree, every intermediate <code>.class</code> file — is simply never referenced by the final image, so it's discarded along with the rest of the build stage's layers. Without the second stage — if this Dockerfile were a single <code>FROM eclipse-temurin:21-jdk</code> build that just ran the app in place — every one of those things would ship inside the running container: a compiler and full build toolchain sitting inside a production process is dead weight (larger image, slower pulls, slower container starts) and a larger attack surface for no operational benefit, since none of it is ever touched again after the jar exists.</p>
+
+<h3>Why the build context has to be the repo root</h3>
+<p class="wide">This is mechanical, not stylistic. <code>settings.gradle</code> at the repo root declares:</p>
+<pre><code>include 'order-service', 'inventory-service', 'payment-service', 'search-indexer-service'</code></pre>
+<p class="wide">Gradle's configuration phase evaluates <em>every</em> declared subproject's <code>build.gradle</code> before it can run <em>any</em> task — including a task scoped to just one subproject, like <code>:order-service:bootJar</code>. It has to: resolving the project graph and any inter-project dependency wiring requires knowing what every subproject declares, even ones the requested task never touches. So the build stage needs <code>gradlew</code>, the <code>gradle/</code> wrapper directory, the root <code>settings.gradle</code>/<code>build.gradle</code>, <strong>and</strong> all four subprojects' own <code>build.gradle</code> files present — not just order-service's.</p>
+<p class="wide">What it does <em>not</em> need is the other three subprojects' actual Java source. Because this project deliberately has no shared schema/utility module (every service keeps its own local copy of the Kafka event classes it depends on), no subproject's <code>compileJava</code> ever reads another subproject's <code>src/</code> — so only <code>COPY order-service/src order-service/src</code> is needed, not the sibling <code>src/</code> trees.</p>
+<div class="callout">
+  <span class="label">What breaks without it</span>
+  Running <code>docker build -f order-service/Dockerfile order-service/</code> — treating the module's own folder as the build context — fails immediately at the very first <code>COPY gradlew .</code> instruction: from inside <code>order-service/</code>, there is no <code>gradlew</code>, no <code>settings.gradle</code>, no sibling <code>build.gradle</code> files to copy. The context simply doesn't contain them.
+</div>
+
+<h3>COPY ordering and Docker's layer cache</h3>
+<p class="wide">Docker caches each instruction as its own layer, keyed by the instruction plus a hash of whatever files it copies in. If an earlier layer's inputs change, every layer after it is invalidated and re-run, even if that later layer's own inputs are unchanged — Docker has no way to know a later step doesn't depend on an earlier one without re-executing it. The classic justification for "copy dependency-related files before source" is that it lets a <em>separate dependency-priming step</em> stay cached across source-only changes.</p>
+<div class="callout">
+  <span class="label">Worth knowing for the follow-up question</span>
+  In this exact Dockerfile, that optimization isn't fully realized yet. There is only one <code>RUN</code> in the build stage — <code>RUN chmod +x gradlew &amp;&amp; ./gradlew :order-service:bootJar --no-daemon</code> — and it comes <em>after</em> the <code>src</code> COPY, not before a separate dependency-resolution step. Since <code>order-service/src</code> changes on nearly every commit, that one RUN layer's cache is invalidated on nearly every build, meaning Gradle re-downloads its full dependency set from Maven Central inside the build stage almost every time, rather than reusing a previously-resolved cache. The COPY ordering (gradlew → wrapper → settings/build.gradle files → src) still separates "rarely changes" from "changes constantly" at the layer level, which is the right shape to build on — but realizing the caching win fully would mean adding something like <code>RUN ./gradlew :order-service:dependencies --no-daemon</code> <em>between</em> the build.gradle COPYs and the src COPY (or switching to a BuildKit cache mount, <code>RUN --mount=type=cache,target=/root/.gradle</code>), neither of which this Dockerfile does today. A sharp reviewer will ask about this — the honest answer is "the ordering is set up for it, but the priming step itself isn't there yet."
+</div>
+
+<h3>WORKDIR and where relative paths resolve</h3>
+<p class="wide"><code>WORKDIR /workspace</code> in the build stage sets the base directory for every subsequent relative <code>COPY</code>/<code>RUN</code> in that stage. <code>WORKDIR /app</code> in the final stage does the same for the runtime image — and critically, it also becomes the JVM process's actual current working directory when <code>ENTRYPOINT ["java", "-jar", "app.jar"]</code> executes, since nothing changes it afterward.</p>
+<p class="wide">This isn't incidental. <code>logback-spring.xml</code> (added in an earlier increment of this project) configures a file appender with a <em>relative</em> path:</p>
+<pre><code>&lt;file&gt;logs/order-service.log&lt;/file&gt;</code></pre>
+<p class="wide">Relative to what, at runtime? Relative to the JVM's working directory — <code>/app</code>, because of this <code>WORKDIR</code> instruction. So the log file actually lands at <code>/app/logs/order-service.log</code> inside the container. That path is exactly what <code>docker-compose.yml</code>'s volume mount targets for this service: <code>order-service-logs:/app/logs</code>.</p>
+<div class="callout">
+  <span class="label">What breaks without it</span>
+  If <code>WORKDIR /app</code> were missing (or set to something else), the log file would be written somewhere else entirely — and the Filebeat container, which mounts the <em>same</em> named volume read-only at <code>/logs/order-service</code>, would find an empty directory. No parse errors, no crash — just silence. Nothing would ever reach Logstash or Elasticsearch, and there'd be no obvious error message pointing at why, exactly the kind of quiet, hard-to-diagnose failure this project already hit once with the Logstash index-naming issue.
+</div>
+
+<h3>What EXPOSE actually does — and doesn't</h3>
+<p class="wide"><code>EXPOSE 8080</code> is documentation baked into the image metadata. It does <strong>not</strong> publish the port to the host, and it does <strong>not</strong> restrict or configure what port the process inside the container actually listens on — Spring Boot binds to 8080 because <code>server.port: 8080</code> in <code>application.yaml</code> says so, completely independent of this line. What actually makes port 8080 reachable from the host is <code>docker-compose.yml</code>'s explicit <code>ports: - "8080:8080"</code> mapping for this service — covered in <a href="#compose">§3</a>. The one real functional effect <code>EXPOSE</code> has is with <code>docker run -P</code> (publish-all), which uses <code>EXPOSE</code>d ports to decide what to auto-map to random host ports — a convenience this project doesn't rely on, since Compose's explicit port mappings are used instead.</p>
+
+<h3>Why ENTRYPOINT, and why this exact form</h3>
+<pre><code>ENTRYPOINT ["java", "-jar", "app.jar"]</code></pre>
+<p class="wide">This is <em>exec form</em> — a JSON array — not <em>shell form</em> (<code>ENTRYPOINT java -jar app.jar</code> as a bare string). The difference matters: exec form runs <code>java</code> directly as the container's PID 1, with no intermediate shell in between. Shell form would instead run <code>/bin/sh -c "java -jar app.jar"</code>, making the shell PID 1 and <code>java</code> its child — and a very common, very real Docker failure mode is that <code>docker stop</code> sends <code>SIGTERM</code> to PID 1, which a shell frequently does not forward to its child process, so the JVM never gets the signal to shut down gracefully and the container hangs until Docker's hard-kill timeout expires. Exec form avoids that entirely by giving the JVM the signal directly.</p>
+<p class="wide"><code>ENTRYPOINT</code> (rather than <code>CMD</code>) is the right choice here specifically because there's exactly one way this image is ever meant to run — always launch this one jar. <code>CMD</code> is the idiom for a default that's meant to be easily overridden at <code>docker run</code> time; this project doesn't need that, since environment-specific behavior (the <code>docker</code> Spring profile) is switched via an environment variable — <code>SPRING_PROFILES_ACTIVE=docker</code>, set in <code>docker-compose.yml</code> — not via a different launch command.</p>
+
+<h3>Where the other three Dockerfiles differ</h3>
+<table class="linebyline">
+<tr><th>Module</th><th>bootJar task</th><th>COPY --from=build source</th><th>EXPOSE</th></tr>
+<tr><td>inventory-service</td><td class="code">:inventory-service:bootJar</td><td class="code">inventory-service/build/libs/*.jar</td><td class="code">8081</td></tr>
+<tr><td>payment-service</td><td class="code">:payment-service:bootJar</td><td class="code">payment-service/build/libs/*.jar</td><td class="code">8082</td></tr>
+<tr><td>search-indexer-service</td><td class="code">:search-indexer-service:bootJar</td><td class="code">search-indexer-service/build/libs/*.jar</td><td class="code">8083</td></tr>
+</table>
+<p class="wide">Every other line — base images, stage names, the whole build.gradle COPY block, <code>chmod +x gradlew</code>, WORKDIR values, ENTRYPOINT — is byte-for-byte identical across all four. One detail worth knowing if asked: search-indexer-service's image exposes 8083 for its <code>/search/orders</code> endpoint, but has no <code>/actuator/health</code> — that service was never given the Actuator dependency, a scoping decision from earlier in the project, not an oversight introduced here.</p>
+</section>
+
+<!-- ============ SECTION 3 ============ -->
+<section id="compose">
+<h2>3. docker-compose.yml, section by section</h2>
+
+<p class="wide">The problem this file solves is the one described in <a href="#why">§1</a>: a set of individually-typed <code>docker run</code> commands has no single source of truth, no version history, and no way to reconstruct the whole system in one step. <code>docker-compose.yml</code> replaces all of that with one declarative file, checked into git, describing every container's image, configuration, storage, health, and startup dependencies — reproducible with a single <code>docker compose up -d --build</code>.</p>
+
+<h3>Anatomy of a service definition: order-postgres</h3>
+<pre><code>  order-postgres:
+    image: postgres:16
+    container_name: order-postgres
+    environment:
+      POSTGRES_DB: orders
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-order-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - order-platform-net</code></pre>
+<table class="linebyline">
+<tr><th>Key</th><th>What it does</th></tr>
+<tr><td class="code">image</td><td>Pulls the official <code>postgres:16</code> image. Pinning the major version — not <code>postgres:latest</code> — means a future rebuild won't silently jump to Postgres 17 and change on-disk format compatibility or behavior underneath the project.</td></tr>
+<tr><td class="code">container_name</td><td>Without it, Compose auto-generates a name like <code>order-service-order-postgres-1</code> (project + service + replica index). The explicit name here is exactly what makes <code>jdbc:postgresql://order-postgres:5432/orders</code> resolvable from other containers — Docker runs an embedded DNS server on every user-defined bridge network that resolves container names to their internal IPs.</td></tr>
+<tr><td class="code">environment</td><td>These three variables are read by the official Postgres image's own entrypoint script on first boot (when the data directory is empty) to auto-create the database, user, and password. They match what order-service's own <code>spring.datasource.username: ${DB_USERNAME:postgres}</code> default expects.</td></tr>
+<tr><td class="code">ports</td><td><code>"5432:5432"</code> (host:container) only matters for reaching Postgres <em>from the host machine</em> — a local <code>psql</code>, a GUI client. Containers on <code>order-platform-net</code> never use this mapping; they talk to the container's internal port 5432 directly over the Docker network, regardless of what's published to the host.</td></tr>
+<tr><td class="code">volumes</td><td>A named volume, <code>postgres-order-data</code>, mounted at Postgres's real data directory. See the dedicated discussion below — this is what makes the data survive a container being removed and recreated.</td></tr>
+<tr><td class="code">healthcheck</td><td>Runs <code>pg_isready -U postgres</code> (a lightweight CLI bundled in the image whose only job is "can this server accept a connection") every 5 seconds, up to 10 tries. This is what gives <code>depends_on: condition: service_healthy</code> anything meaningful to wait on — covered below with a concrete failure scenario.</td></tr>
+<tr><td class="code">networks</td><td>Puts the container on the shared <code>order-platform-net</code> bridge network — the source of both the name-based DNS resolution above and isolation from anything not on this network.</td></tr>
+</table>
+
+<h3>Why Kafka's environment block is shaped the way it is: two listeners</h3>
+<pre><code>      KAFKA_LISTENERS: PLAINTEXT://:29092,PLAINTEXT_HOST://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://order-kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT</code></pre>
+<p class="wide">(Alongside <code>KAFKA_PROCESS_ROLES: broker,controller</code> and <code>KAFKA_NODE_ID: 1</code> — this is a single node acting as both broker and KRaft controller, Kafka's newer Zookeeper-free consensus mode, with itself as the sole quorum voter via <code>KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093</code>.)</p>
+<p class="wide">The Kafka wire protocol isn't a simple "connect once, keep talking to the same socket" protocol like plain HTTP. A client's very first connection to any broker (the "bootstrap" broker) returns a metadata response telling the client the actual host:port to use for every partition leader it will talk to <em>next</em> — and the client switches to whatever address that response advertises. That means the address a broker advertises has to actually be reachable from wherever the client lives.</p>
+<p class="wide">This project has two genuinely different populations of Kafka clients: the four app services, which are <em>other containers</em> on <code>order-platform-net</code> and resolve <code>order-kafka</code> via Docker's internal DNS; and host-side tools — a locally-run <code>kafka-consumer-groups.sh</code>, exactly like the ones used earlier in this project to reset search-indexer-service's consumer offsets — for which <code>order-kafka</code> means nothing (it isn't a real DNS name outside the Docker network) and only <code>localhost:9092</code>, published via <code>ports: "9092:9092"</code>, works.</p>
+<div class="callout">
+  <span class="label">What goes wrong with only one listener</span>
+  If Kafka advertised only <code>order-kafka:29092</code>, a host-side client connecting via <code>localhost:9092</code> would complete its <em>first</em> handshake fine — the port is published — but the very next request would come back telling it to now talk to <code>order-kafka:29092</code>, which the host can't resolve. Every request after the first would then fail to connect, while the initial connection looked completely healthy. This is a well-known, very real "Kafka in Docker" failure mode, and it's exactly why two separate listener names exist here — <code>PLAINTEXT</code> (internal, :29092) and <code>PLAINTEXT_HOST</code> (host-facing, :9092) — each advertised with the address appropriate to whoever's actually resolving it. It's also exactly why this project's <code>application-docker.yml</code> files point at <code>order-kafka:29092</code> while the plain <code>application.yml</code> (used by host-based <code>bootRun</code>) still says <code>localhost:9092</code> — they're each using the listener meant for them.
+</div>
+<p class="wide"><code>KAFKA_LISTENER_SECURITY_PROTOCOL_MAP</code> maps each listener name to a security protocol — all three are <code>PLAINTEXT</code> here (no TLS, no SASL — appropriate for local dev, not anything resembling production). <code>KAFKA_INTER_BROKER_LISTENER_NAME</code> tells brokers which listener to use when talking to <em>each other</em> (moot with a single broker, but still required configuration). <code>KAFKA_CONTROLLER_LISTENER_NAMES</code> keeps KRaft's own consensus traffic on its own listener (port 9093), separate from client data traffic — control-plane kept apart from data-plane on principle.</p>
+
+<h3>healthcheck and depends_on: condition — what it actually enforces</h3>
+<pre><code>  order-service:
+    ...
+    depends_on:
+      order-postgres:
+        condition: service_healthy
+      order-kafka:
+        condition: service_healthy
+      order-redis:
+        condition: service_started</code></pre>
+<p class="wide">A plain <code>depends_on</code> with no condition — the form actually used for <code>order-redis</code> here, and for <code>order-prometheus</code>/<code>order-logstash</code> elsewhere in this file — only orders container <em>starts</em>. Compose launches the dependency's process and, the moment it exists, considers the dependency satisfied and proceeds to start whatever depends on it — regardless of whether that process has actually finished initializing.</p>
+<div class="callout">
+  <span class="label">Concrete failure scenario, specific to this project</span>
+  order-service runs Flyway migrations at startup, before Hibernate even initializes (<code>spring.flyway.enabled: true</code>, <code>spring.jpa.hibernate.ddl-auto: validate</code> — Flyway owns the schema, Hibernate only validates against it, a decision already made earlier in this project). Flyway has to successfully open a JDBC connection and run its migration SQL against order-postgres before order-service's application context can finish starting at all. Postgres's own startup — especially against a brand-new, empty volume — involves starting the postmaster process, running <code>initdb</code>, creating the configured database/user/password, and <em>then</em> finally opening its listening socket. That sequence takes real, measurable time. If <code>depends_on: order-postgres</code> had no condition, order-service's container (and its Flyway connection attempt) could start executing while Postgres is still mid-<code>initdb</code>, not yet accepting connections at all — producing a connection-refused failure, and depending on how much retry/backoff HikariCP's pool initialization tolerates, either a flaky slow startup or an outright failed one. This is a classic, very real "works most of the time, fails under load or on a cold machine" bug in exactly this kind of multi-container system.
+</div>
+<p class="wide"><code>condition: service_healthy</code> closes that gap by tying the dependency gate to the <em>healthcheck's actual result</em>, not merely "the process exists." Compose won't start order-service's container until <code>pg_isready -U postgres</code> has genuinely returned success against order-postgres — a real, polled, deterministic readiness signal, not a guess.</p>
+<p class="wide">Worth noting honestly: <code>order-redis</code> is depended on with <code>condition: service_started</code>, not <code>service_healthy</code> — because <code>order-redis</code>'s own service definition has no <code>healthcheck</code> block at all in this file, so <code>service_healthy</code> isn't even a condition Compose could evaluate for it. In practice this is a smaller real risk than the Postgres/Kafka cases — Redis starts almost instantly with no schema/migration step, and nothing in these services' startup paths does an eager, blocking connectivity check against Redis the way Flyway does against Postgres — but it is a genuinely weaker guarantee than its siblings get, and it's exactly the kind of gap a sharp reviewer would ask about.</p>
+
+<h3>Named volumes vs. bind mounts</h3>
+<p class="wide">Both mechanisms attach external storage to a container, but for opposite reasons here.</p>
+<h4>Named volumes — data the running system generates and owns</h4>
+<p class="wide"><code>postgres-order-data</code>, <code>postgres-inventory-data</code>, <code>postgres-payment-data</code>, <code>elasticsearch-data</code>, <code>prometheus-data</code>, <code>grafana-data</code>, and the four per-service log volumes (<code>order-service-logs</code>, etc.) are all named volumes: Postgres's actual table rows, Elasticsearch's index segments, Prometheus's TSDB chunks, Grafana's own dashboard/user database, and each service's log output. Docker manages the real storage location itself, under Docker's own data root — not somewhere meant to be browsed directly. The load-bearing property is that a named volume's lifecycle is <strong>decoupled from any specific container</strong>: removing and recreating a container (exactly what <code>docker compose up --build</code> did to every infra container in the previous step of this project) leaves the volume untouched. Only an explicit <code>docker compose down -v</code>, or a direct <code>docker volume rm</code>, destroys it. Without named volumes, the data would live in the container's own writable layer and vanish the instant that specific container is removed — which is precisely why the fresh containers from the last <code>docker compose up -d --build</code> run started with an empty <code>orders</code> table: they were the very first containers ever attached to those particular named volumes, not a reattachment to whatever storage the earlier, manually-run containers happened to use.</p>
+<h4>Bind mounts — config files owned by the repo</h4>
+<pre><code>      - ./infra/logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+      - ./infra/filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml</code></pre>
+<p class="wide">These map a real path <em>on the host filesystem</em> — files that live in this repo, under version control, editable in a normal text editor — directly into the container. The intent is the opposite of a named volume: the file's content is authored and owned <em>outside</em> the container, and the container just reads whatever is currently on disk. This is exactly the workflow used a few steps ago in this project, when fixing Logstash's index-naming bug meant editing <code>infra/logstash/logstash.conf</code> in the repo and recreating the <code>order-logstash</code> container — no image rebuild needed, because the file was never baked into a layer in the first place. The <code>:ro</code> suffix on Filebeat's mounts (read-only) is a small extra safety measure: Filebeat has no legitimate reason to ever write to its own config, so a bug or compromise there can't corrupt the source-of-truth file sitting in the repo.</p>
+<p class="wide">One overlap worth naming: the four per-service log directories are named volumes, not bind mounts, even though a human might reasonably want to tail them directly. That's because they're <em>written by one container (the app service) and read by another (Filebeat)</em> — a volume shared between two containers, not between a container and the host repo. A bind mount to a host directory would also have worked here, and would arguably be more convenient for direct host-side log inspection — but the named-volume choice avoids depending on a specific host directory layout existing, which keeps the compose file portable across different developer machines or CI runners. It's a real trade-off, not a hard rule.</p>
+
+<h3>networks: one shared network instead of a patchwork</h3>
+<pre><code>networks:
+  order-platform-net:
+    driver: bridge</code></pre>
+<p class="wide">Every one of the 15 services declares <code>networks: - order-platform-net</code>, putting all of them on one shared, user-defined bridge network. This replaces what the earlier, hand-run-container era of this project effectively had instead: separate ad-hoc networks created by whatever <code>docker run --network ...</code> flags someone happened to type, with containers on different networks unable to resolve each other by name at all — forcing exactly the kind of <code>host.docker.internal</code> workaround Prometheus's scrape config used before it was fixed to point at <code>order-service:8080</code> directly. One shared network means every container gets the same embedded DNS resolution of every other container's name, with no cross-network routing tricks needed — and, because it's a distinct user-defined network rather than Docker's default bridge, anything not explicitly attached to <code>order-platform-net</code> can't resolve or reach these containers by name at all, which is a meaningful isolation boundary, not just a naming convenience.</p>
+
+<h3>volumes: the bottom-level declarations</h3>
+<pre><code>volumes:
+  postgres-order-data:
+  postgres-inventory-data:
+  postgres-payment-data:
+  elasticsearch-data:
+  prometheus-data:
+  grafana-data:
+  order-service-logs:
+  inventory-service-logs:
+  payment-service-logs:
+  search-indexer-service-logs:</code></pre>
+<p class="wide">Each bare name under the top-level <code>volumes:</code> key, with no further config (no <code>driver_opts</code>, no <code>external: true</code>), tells Compose to create a standard, locally-managed Docker volume the first time it's needed, and to keep reusing that same volume on every subsequent <code>docker compose up</code> — for as long as it isn't explicitly torn down.</p>
+</section>
+
+<!-- ============ SECTION 4 ============ -->
+<section id="diagrams">
+<h2>4. Two diagrams</h2>
+
+<h3>The multi-stage build, source to final image</h3>
+<div class="diagram-wrap">
+<pre class="mermaid">
+flowchart LR
+  subgraph inputs["Build context — repo root"]
+    src["order-service/src/**"]
+    gradlefiles["gradlew, gradle/, settings.gradle,\nroot + 4x subproject build.gradle"]
+  end
+
+  subgraph stage1["Stage 1 — build  (eclipse-temurin:21-jdk)"]
+    compile["RUN ./gradlew :order-service:bootJar --no-daemon"]
+    jar["order-service-0.0.1-SNAPSHOT.jar"]
+    compile --> jar
+  end
+
+  subgraph discarded["Discarded — never reaches the final image"]
+    jdktools["Full JDK: javac, jshell, build tools"]
+    depcache["Downloaded Gradle distribution\n+ full dependency cache"]
+    srctree["Source tree, .class files,\nintermediate build/ output"]
+  end
+
+  subgraph stage2["Stage 2 — final image  (eclipse-temurin:21-jre)"]
+    jreruntime["JRE runtime only"]
+    appjar["app.jar"]
+    entry["ENTRYPOINT: java -jar app.jar"]
+    jreruntime --> appjar --> entry
+  end
+
+  src --> compile
+  gradlefiles --> compile
+  compile -. byproduct .-> jdktools
+  compile -. byproduct .-> depcache
+  compile -. byproduct .-> srctree
+  jar -->|"COPY --from=build"| appjar
+</pre>
+</div>
+<p class="diagram-caption">The only thing that crosses from stage 1 into stage 2 is the single jar, via <code>COPY --from=build</code>. Everything in the "discarded" group exists only inside the build stage's layers, which the final image never references — that's the entire size/security saving a multi-stage build buys over a single-stage <code>FROM eclipse-temurin:21-jdk</code> build.</p>
+
+<h3>The full runtime system, grouped by role</h3>
+<div class="diagram-wrap">
+<pre class="mermaid">
+flowchart TD
+  subgraph db["Data Stores"]
+    orderPg["order-postgres\nPostgres 16"]
+    invPg["inventory-postgres\nPostgres 16"]
+    payPg["payment-postgres\nPostgres 16"]
+    redis["order-redis\nRedis 7"]
+  end
+
+  subgraph msg["Messaging"]
+    kafka["order-kafka\nApache Kafka (KRaft)"]
+    kafkaUi["order-kafka-ui"]
+  end
+
+  subgraph search["Search &amp; Logging"]
+    es["order-elasticsearch\n:9200"]
+    kibana["order-kibana"]
+    logstash["order-logstash\n:5044"]
+    filebeat["order-filebeat"]
+  end
+
+  subgraph obs["Observability"]
+    prom["order-prometheus\n:9090"]
+    grafana["order-grafana\n:3000"]
+  end
+
+  subgraph app["App Services"]
+    orderSvc["order-service\n:8080"]
+    invSvc["inventory-service\n:8081"]
+    paySvc["payment-service\n:8082"]
+    searchSvc["search-indexer-service\n:8083"]
+  end
+
+  orderSvc -->|"SQL / JDBC"| orderPg
+  orderSvc -->|"RESP — cache, idempotency, locks"| redis
+  orderSvc -->|"Kafka protocol :29092 — produces orders.created"| kafka
+
+  invSvc -->|"SQL / JDBC"| invPg
+  invSvc -->|"RESP — idempotency, locks"| redis
+  invSvc -->|"Kafka protocol :29092 — consumes orders.created, payments.failed"| kafka
+
+  paySvc -->|"SQL / JDBC"| payPg
+  paySvc -->|"RESP — idempotency"| redis
+  paySvc -->|"Kafka protocol :29092 — consumes orders.created; produces payments.*"| kafka
+
+  searchSvc -->|"HTTP REST :9200 — index/update/search"| es
+  searchSvc -->|"Kafka protocol :29092 — consumes orders.created, payments.*"| kafka
+
+  kafkaUi -->|"Kafka protocol :29092 (admin/read)"| kafka
+
+  filebeat -->|"Beats protocol :5044"| logstash
+  logstash -->|"HTTP bulk index :9200"| es
+  kibana -->|"HTTP :9200"| es
+
+  prom -->|"HTTP scrape /actuator/prometheus"| orderSvc
+  prom -->|"HTTP scrape /actuator/prometheus"| invSvc
+  prom -->|"HTTP scrape /actuator/prometheus"| paySvc
+  grafana -->|"HTTP query :9090"| prom
+</pre>
+</div>
+<p class="diagram-caption">Not shown as an edge because it isn't a network call: Filebeat's actual log <em>sources</em> are the four per-service named volumes (<code>order-service-logs</code> etc.), shared read-only with the app containers that write them — see <a href="#compose">§3</a>. search-indexer-service has no edge from Prometheus, since it was never given the Actuator dependency (§2). All Kafka traffic uses the internal <code>PLAINTEXT</code> listener on :29092, not the host-facing :9092 listener — every one of these clients is itself a container.</p>
+</section>
+
+<!-- ============ SECTION 5 ============ -->
+<section id="achieved">
+<h2>5. What we actually achieved</h2>
+
+<p class="wide">The headline benefit is reproducibility: <code>docker compose up -d --build</code>, run from a clean checkout of this repository, reconstructs the entire 15-container system — three databases, Redis, Kafka, the whole Elastic logging stack, Prometheus and Grafana, and all four application services, built from source — deterministically, with no manually-typed <code>docker run</code> commands to remember, and no risk of two developers' environments quietly drifting apart. Onboarding a new engineer now requires Docker and this repository — not a specific locally-installed JDK version, not a manually set-up Postgres/Kafka/Elasticsearch, not tribal knowledge of which flags some earlier <code>docker run</code> invocation used.</p>
+
+<p class="wide">More specifically, this stage is what makes <strong>Phase 8 (Kubernetes) possible at all</strong>. Kubernetes's fundamental unit of deployment is a container image referenced in a Pod spec's <code>image:</code> field — it has no mechanism for "SSH into a host and run <code>gradlew bootRun</code>." Every Kubernetes primitive that matters for this project going forward — a <code>Deployment</code> managing replicas of order-service, a <code>Service</code> load-balancing across them, a rolling update replacing old Pods with new ones — presupposes that "order-service" already means a real, standalone, runnable image that can be pulled and started without any of this repository's source code or build tooling present. That's exactly what <code>order-service/Dockerfile</code> now produces, and what was confirmed working end-to-end when the full stack was built and started via Compose in this same project.</p>
+
+<h3>What this stage deliberately does not solve yet</h3>
+<p class="wide">Worth naming honestly, since these are exactly the questions a good interviewer follows up with:</p>
+<ul>
+  <li><strong>No image registry.</strong> The four app images exist only in the local Docker image store on whichever machine built them (tagged <code>order-service-order-service:latest</code> etc. by Compose's own default naming). There's no push to a registry, and no tagging strategy beyond the implicit <code>:latest</code> — nothing yet distinguishes "the image currently running" from "the image the current source would produce."</li>
+  <li><strong>Single instance, no replicas.</strong> Every service in <code>docker-compose.yml</code> runs as exactly one container. There's no load balancing, no redundancy, no rolling-update story — all of that is what Phase 8 exists to add.</li>
+  <li><strong>Credentials in plaintext environment variables.</strong> <code>POSTGRES_PASSWORD: postgres</code> and friends are fine for local development, but they're sitting in a checked-in YAML file — nothing here is what a real secrets-management story would look like.</li>
+  <li><strong>The Gradle dependency-cache optimization noted in §2</strong> isn't realized yet — every image rebuild currently re-downloads the full dependency set rather than reusing a cached layer.</li>
+</ul>
+</section>
+
+<footer>
+  order-platform &middot; Phase 7 (Docker containerization) study reference. Every quoted line above is copied directly from order-service/Dockerfile, inventory-service/Dockerfile, payment-service/Dockerfile, search-indexer-service/Dockerfile, and docker-compose.yml as they exist in this repository.
+</footer>
+
+</div>
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: "default", flowchart: { htmlLabels: true } });
+</script>
+</body>
+</html>

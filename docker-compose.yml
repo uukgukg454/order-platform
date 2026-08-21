@@ -1,0 +1,290 @@
+services:
+  order-postgres:
+    image: postgres:16
+    container_name: order-postgres
+    environment:
+      POSTGRES_DB: orders
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-order-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - order-platform-net
+
+  inventory-postgres:
+    image: postgres:16
+    container_name: inventory-postgres
+    environment:
+      POSTGRES_DB: inventory
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-inventory-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - order-platform-net
+
+  payment-postgres:
+    image: postgres:16
+    container_name: payment-postgres
+    environment:
+      POSTGRES_DB: payments
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres-payment-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - order-platform-net
+
+  order-redis:
+    image: redis:7-alpine
+    container_name: order-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - order-platform-net
+
+  order-kafka:
+    image: apache/kafka:latest
+    container_name: order-kafka
+    environment:
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_LISTENERS: PLAINTEXT://:29092,PLAINTEXT_HOST://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://order-kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+    networks:
+      - order-platform-net
+
+  order-kafka-ui:
+    image: kafbat/kafka-ui:latest
+    container_name: order-kafka-ui
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: order-kafka:29092
+    ports:
+      - "8090:8080"
+    depends_on:
+      order-kafka:
+        condition: service_healthy
+    networks:
+      - order-platform-net
+
+  order-elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    container_name: order-elasticsearch
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+    networks:
+      - order-platform-net
+
+  order-kibana:
+    image: docker.elastic.co/kibana/kibana:8.15.0
+    container_name: order-kibana
+    environment:
+      ELASTICSEARCH_HOSTS: http://order-elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      order-elasticsearch:
+        condition: service_healthy
+    networks:
+      - order-platform-net
+
+  order-logstash:
+    image: docker.elastic.co/logstash/logstash:8.15.0
+    container_name: order-logstash
+    environment:
+      xpack.monitoring.enabled: "false"
+    ports:
+      - "5044:5044"
+    volumes:
+      - ./infra/logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+    depends_on:
+      order-elasticsearch:
+        condition: service_healthy
+    networks:
+      - order-platform-net
+
+  order-filebeat:
+    image: docker.elastic.co/beats/filebeat:8.15.0
+    container_name: order-filebeat
+    user: root
+    command: ["filebeat", "-e", "--strict.perms=false"]
+    volumes:
+      - ./infra/filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - order-service-logs:/logs/order-service:ro
+      - inventory-service-logs:/logs/inventory-service:ro
+      - payment-service-logs:/logs/payment-service:ro
+      - search-indexer-service-logs:/logs/search-indexer-service:ro
+    depends_on:
+      - order-logstash
+    networks:
+      - order-platform-net
+
+  order-prometheus:
+    image: prom/prometheus:latest
+    container_name: order-prometheus
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - order-platform-net
+
+  order-grafana:
+    image: grafana/grafana:latest
+    container_name: order-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - order-prometheus
+    networks:
+      - order-platform-net
+
+  order-service:
+    build:
+      context: .
+      dockerfile: order-service/Dockerfile
+    container_name: order-service
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    ports:
+      - "8080:8080"
+    volumes:
+      - order-service-logs:/app/logs
+    depends_on:
+      order-postgres:
+        condition: service_healthy
+      order-kafka:
+        condition: service_healthy
+      order-redis:
+        condition: service_started
+    networks:
+      - order-platform-net
+
+  inventory-service:
+    build:
+      context: .
+      dockerfile: inventory-service/Dockerfile
+    container_name: inventory-service
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    ports:
+      - "8081:8081"
+    volumes:
+      - inventory-service-logs:/app/logs
+    depends_on:
+      inventory-postgres:
+        condition: service_healthy
+      order-kafka:
+        condition: service_healthy
+      order-redis:
+        condition: service_started
+    networks:
+      - order-platform-net
+
+  payment-service:
+    build:
+      context: .
+      dockerfile: payment-service/Dockerfile
+    container_name: payment-service
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    ports:
+      - "8082:8082"
+    volumes:
+      - payment-service-logs:/app/logs
+    depends_on:
+      payment-postgres:
+        condition: service_healthy
+      order-kafka:
+        condition: service_healthy
+      order-redis:
+        condition: service_started
+    networks:
+      - order-platform-net
+
+  search-indexer-service:
+    build:
+      context: .
+      dockerfile: search-indexer-service/Dockerfile
+    container_name: search-indexer-service
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    ports:
+      - "8083:8083"
+    volumes:
+      - search-indexer-service-logs:/app/logs
+    depends_on:
+      order-elasticsearch:
+        condition: service_healthy
+      order-kafka:
+        condition: service_healthy
+    networks:
+      - order-platform-net
+
+networks:
+  order-platform-net:
+    driver: bridge
+
+volumes:
+  postgres-order-data:
+  postgres-inventory-data:
+  postgres-payment-data:
+  elasticsearch-data:
+  prometheus-data:
+  grafana-data:
+  order-service-logs:
+  inventory-service-logs:
+  payment-service-logs:
+  search-indexer-service-logs:

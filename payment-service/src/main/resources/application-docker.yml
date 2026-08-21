@@ -1,0 +1,16 @@
+# Activated via SPRING_PROFILES_ACTIVE=docker inside a container. Additive
+# on top of application.yml — see order-service's own application-docker.yml
+# for the fuller rationale, same pattern here.
+spring:
+  datasource:
+    # payment-postgres, not order-postgres: this service runs its own
+    # separate Postgres container (confirmed via docker ps), same reasoning
+    # as inventory-service's own application-docker.yml. Internal container
+    # port is 5432 regardless of what host port application.yml's :5434
+    # maps to for host-side access from bootRun.
+    url: jdbc:postgresql://payment-postgres:5432/payments
+  data:
+    redis:
+      host: order-redis
+  kafka:
+    bootstrap-servers: order-kafka:29092
