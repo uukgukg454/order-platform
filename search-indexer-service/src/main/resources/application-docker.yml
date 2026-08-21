@@ -1,0 +1,14 @@
+# Activated via SPRING_PROFILES_ACTIVE=docker inside a container. Additive
+# on top of application.yml — see order-service's own application-docker.yml
+# for the fuller rationale, same pattern here.
+app:
+  elasticsearch:
+    host: order-elasticsearch
+    # Port doesn't actually change container-to-container vs. host access —
+    # unlike Kafka's separate internal/external listeners, Elasticsearch's
+    # default HTTP port (9200) isn't remapped, so only the host differs here.
+    port: 9200
+
+spring:
+  kafka:
+    bootstrap-servers: order-kafka:29092
