@@ -19,6 +19,7 @@ repositories {
 }
 
 dependencies {
+	implementation 'net.logstash.logback:logstash-logback-encoder:7.4'
 	implementation 'org.springframework.boot:spring-boot-starter-web'
 	// spring-boot-starter-web pulls in Jackson transitively at runtime, but
 	// not as a compile-time dependency of THIS module — same gap
