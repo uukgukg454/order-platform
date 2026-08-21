@@ -19,6 +19,7 @@ repositories {
 }
 
 dependencies {
+	implementation 'net.logstash.logback:logstash-logback-encoder:7.4'
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 	// No version — micrometer-registry-prometheus is BOM-managed via the
 	// micrometer-bom import in Spring Boot's own BOM, same nested-BOM

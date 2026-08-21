@@ -1,0 +1,32 @@
+filebeat.inputs:
+  - type: log
+    enabled: true
+    paths:
+      - /logs/order-service/*.log
+    fields:
+      service: order-service
+    fields_under_root: true
+  - type: log
+    enabled: true
+    paths:
+      - /logs/inventory-service/*.log
+    fields:
+      service: inventory-service
+    fields_under_root: true
+  - type: log
+    enabled: true
+    paths:
+      - /logs/payment-service/*.log
+    fields:
+      service: payment-service
+    fields_under_root: true
+  - type: log
+    enabled: true
+    paths:
+      - /logs/search-indexer-service/*.log
+    fields:
+      service: search-indexer-service
+    fields_under_root: true
+
+output.logstash:
+  hosts: ["order-logstash:5044"]

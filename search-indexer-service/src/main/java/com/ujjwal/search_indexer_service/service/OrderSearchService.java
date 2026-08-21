@@ -71,6 +71,7 @@ public class OrderSearchService {
             // redundant Redis traffic protecting against a problem that
             // can't happen on this path.
             client.index(i -> i.index(OrderDocument.INDEX_NAME).id(document.orderId().toString()).document(document));
+            log.info("Indexed order {} (customerId={}, status={})", document.orderId(), document.customerId(), document.status());
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to index order " + document.orderId(), e);
         }
@@ -79,6 +80,7 @@ public class OrderSearchService {
     public void updateStatus(UUID orderId, String status) {
         try {
             client.update(u -> u.index(OrderDocument.INDEX_NAME).id(orderId.toString()).doc(new StatusUpdate(status)), OrderDocument.class);
+            log.info("Updated order {} status to {}", orderId, status);
         } catch (ElasticsearchException e) {
             if (e.status() == 404) {
                 // payments.completed/payments.failed and orders.created arrive
