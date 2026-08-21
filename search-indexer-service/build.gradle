@@ -1,0 +1,71 @@
+plugins {
+	id 'java'
+	id 'jacoco'
+	id 'org.springframework.boot' version '4.1.0'
+	id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.ujjwal'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(21)
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+	// spring-boot-starter-web pulls in Jackson transitively at runtime, but
+	// not as a compile-time dependency of THIS module — same gap
+	// order-service already hit needing to import Jackson classes directly
+	// (its own RedisConfig) rather than only letting Spring use Jackson
+	// internally. ElasticsearchConfig does the same here for its ObjectMapper.
+	implementation 'com.fasterxml.jackson.core:jackson-databind'
+	implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
+	implementation 'org.springframework.kafka:spring-kafka'
+	// spring-kafka alone has no Spring Boot auto-configuration bundled in —
+	// same gap already hit in order-service/inventory-service/payment-service.
+	implementation 'org.springframework.boot:spring-boot-kafka'
+
+	// Pinned explicitly to 8.15.5, deliberately NOT left to Spring Boot's
+	// BOM: Boot 4.1.0's own spring-boot-dependencies POM manages
+	// co.elastic.clients:elasticsearch-java at 9.4.2 (the version Spring
+	// Data Elasticsearch 6.1.0 — what spring-boot-starter-data-elasticsearch
+	// would pull in — is built against, per Spring Data's own compatibility
+	// matrix). That targets Elasticsearch 9.x servers, a major version ahead
+	// of the 8.15 server this project actually runs locally. Elastic's
+	// clients only guarantee compatibility with a server on the SAME major
+	// version, so taking the starter as-is would mean a 9.x client talking
+	// to an 8.15 server. This explicit version override is what makes this
+	// module use 8.15.5 instead of silently resolving to the BOM's 9.4.2 —
+	// see ElasticsearchConfig for the client bean this backs, and the same
+	// override pattern already used for redisson-spring-boot-starter
+	// elsewhere in this repo for an analogous BOM/reality mismatch.
+	implementation 'co.elastic.clients:elasticsearch-java:8.15.5'
+
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+	// Same fix as the other services' main()/test-task setup: tests boot
+	// the Spring context directly and never go through main(), so the JVM
+	// default timezone needs setting here too.
+	systemProperty 'user.timezone', 'UTC'
+	finalizedBy jacocoTestReport
+}
+
+jacocoTestReport {
+	dependsOn test
+	reports {
+		html.required = true
+		xml.required = false
+		csv.required = false
+	}
+}
