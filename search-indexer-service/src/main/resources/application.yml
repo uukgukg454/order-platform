@@ -1,0 +1,45 @@
+spring:
+  application:
+    name: search-indexer-service
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      # Independent consumer group, same fan-out rationale already used by
+      # inventory-service/payment-service: every distinct group-id gets its
+      # own full copy of each topic's records, so this service seeing every
+      # order/payment event doesn't take anything away from the other two
+      # services' own independent consumption of the same topics.
+      group-id: search-indexer-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: com.ujjwal.search_indexer_service.event
+        spring.json.use.type.headers: false
+        # This is the DEFAULT listener container factory's target type,
+        # covering the orders.created listener only — payments.completed and
+        # payments.failed need their own JsonDeserializer default type
+        # (PaymentCompletedEvent / PaymentFailedEvent), which application.yml
+        # can only express once. See KafkaConsumerConfig for the two extra
+        # factories those listeners actually use, same pattern as
+        # inventory-service's paymentFailedKafkaListenerContainerFactory.
+        spring.json.value.default.type: com.ujjwal.search_indexer_service.event.OrderCreatedEvent
+    # No spring.kafka.producer block: unlike inventory-service (which needs a
+    # producer for its DLQ recoverer) or payment-service, this service never
+    # publishes to Kafka — it only ever consumes and writes to Elasticsearch.
+
+app:
+  kafka:
+    topics:
+      orders-created: orders.created
+      payments-completed: payments.completed
+      payments-failed: payments.failed
+  elasticsearch:
+    # Host-based, not containerized — this service runs via bootRun like the
+    # other three, against a locally-running Elasticsearch on its default
+    # HTTP port.
+    host: localhost
+    port: 9200
+
+server:
+  port: 8083
