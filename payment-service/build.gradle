@@ -84,13 +84,45 @@ tasks.named('test') {
 	finalizedBy jacocoTestReport
 }
 
+// Integration tests (Testcontainers-based - real Postgres/Redis/Kafka
+// containers) live in their own source set, separate from the fast unit
+// tests in src/test. This keeps `./gradlew build`/`test` fast for local
+// dev iteration; integration tests run as their own explicit, separate
+// task (`./gradlew integrationTest`), deliberately NOT wired into the
+// default build/check lifecycle, so CI can run them as their own later,
+// slower pipeline stage instead of on every build.
+sourceSets {
+    integrationTest {
+        java.srcDir 'src/integrationTest/java'
+        resources.srcDir 'src/integrationTest/resources'
+        compileClasspath += sourceSets.main.output + sourceSets.test.output
+        runtimeClasspath += sourceSets.main.output + sourceSets.test.output
+    }
+}
+
+configurations {
+    integrationTestImplementation.extendsFrom testImplementation
+    integrationTestRuntimeOnly.extendsFrom testRuntimeOnly
+}
+
+tasks.register('integrationTest', Test) {
+    description = 'Runs integration tests (Testcontainers-based, real Postgres/Redis/Kafka containers).'
+    group = 'verification'
+    testClassesDirs = sourceSets.integrationTest.output.classesDirs
+    classpath = sourceSets.integrationTest.runtimeClasspath
+    useJUnitPlatform()
+    failOnNoDiscoveredTests = false
+    systemProperty 'user.timezone', 'UTC'
+    shouldRunAfter test
+}
+
 jacocoTestReport {
 	// jacocoTestReport reads the .exec file the test task just produced, so
 	// it must run after 'test', not merely be requested alongside it.
 	dependsOn test
 	reports {
 		html.required = true
-		xml.required = false
+		xml.required = true
 		csv.required = false
 	}
 }

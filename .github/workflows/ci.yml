@@ -26,6 +26,9 @@ jobs:
       - name: Build and unit test all modules
         run: .\gradlew.bat build --no-daemon
 
+      - name: Run integration tests (Testcontainers)
+        run: .\gradlew.bat integrationTest --no-daemon
+
       - name: Upload JaCoCo coverage reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -39,3 +42,10 @@ jobs:
         with:
           name: test-reports
           path: '**/build/reports/tests/**'
+
+      - name: Upload integration test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-reports
+          path: '**/build/reports/tests/integrationTest/**'
