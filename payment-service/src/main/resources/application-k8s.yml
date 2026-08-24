@@ -1,0 +1,13 @@
+# Activated via SPRING_PROFILES_ACTIVE=k8s. Additive on top of application.yaml,
+# same overlay pattern as application-docker.yml and order-service's own
+# application-k8s.yml.
+spring:
+  datasource:
+    url: jdbc:postgresql://payment-postgres:5432/payments
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  data:
+    redis:
+      host: order-redis
+  kafka:
+    bootstrap-servers: order-kafka:29092

@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: search-indexer-service-config
+  namespace: order-platform
+data:
+  SPRING_PROFILES_ACTIVE: "k8s"
+  JAVA_TOOL_OPTIONS: "-Djava.net.preferIPv4Stack=true"

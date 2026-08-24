@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: search-indexer-service
+  namespace: order-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: search-indexer-service
+  template:
+    metadata:
+      labels:
+        app: search-indexer-service
+    spec:
+      initContainers:
+        - name: wait-for-deps
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z order-kafka 29092; do echo waiting for order-kafka; sleep 2; done
+              until nc -z order-elasticsearch 9200; do echo waiting for order-elasticsearch; sleep 2; done
+      containers:
+        - name: search-indexer-service
+          image: order-service-search-indexer-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8083
+          envFrom:
+            - configMapRef:
+                name: search-indexer-service-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: search-indexer-service
+  namespace: order-platform
+spec:
+  selector:
+    app: search-indexer-service
+  ports:
+    - port: 8083
+      targetPort: 8083

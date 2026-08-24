@@ -1,0 +1,11 @@
+# Activated via SPRING_PROFILES_ACTIVE=k8s. Additive on top of application.yaml,
+# same overlay pattern as application-docker.yml. No datasource/Secret here —
+# this service has no Postgres dependency.
+app:
+  elasticsearch:
+    host: order-elasticsearch
+    port: 9200
+
+spring:
+  kafka:
+    bootstrap-servers: order-kafka:29092
