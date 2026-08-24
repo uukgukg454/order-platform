@@ -1,0 +1,21 @@
+# Activated via SPRING_PROFILES_ACTIVE=k8s when running inside the minikube
+# cluster. Additive on top of application.yaml, same overlay pattern as
+# application-docker.yml.
+spring:
+  datasource:
+    # order-postgres resolves via Kubernetes' own internal DNS to the
+    # Service of the same name in this namespace — the K8s Service was
+    # deliberately named to match the Compose container name it replaces.
+    url: jdbc:postgresql://order-postgres:5432/orders
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  data:
+    redis:
+      host: order-redis
+  kafka:
+    # order-kafka:29092 — the real internal PLAINTEXT listener, matching
+    # inventory-service/payment-service/search-indexer-service's own
+    # application-k8s.yml. Port 9092 is the PLAINTEXT_HOST listener,
+    # advertised as localhost:9092 — unusable from inside another pod,
+    # since "localhost" there resolves to that pod itself, not the broker.
+    bootstrap-servers: order-kafka:29092
