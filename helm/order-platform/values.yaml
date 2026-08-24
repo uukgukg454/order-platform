@@ -1,0 +1,58 @@
+# Shared defaults applied to every service, plus a per-service map holding
+# only what actually differs between the four app services. Templates range
+# over `services` once to render one Deployment/Service/ConfigMap per entry -
+# adding a fifth service later means adding one block here, not new template
+# files.
+common:
+  springProfile: k8s
+  javaToolOptions: "-Djava.net.preferIPv4Stack=true"
+  imagePullPolicy: IfNotPresent
+
+services:
+  order-service:
+    image: order-service-order-service:latest
+    port: 8080
+    dbSecret: order-service-db-credentials
+    healthProbe: true
+    waitFor:
+      - host: order-postgres
+        port: 5432
+      - host: order-redis
+        port: 6379
+
+  inventory-service:
+    image: order-service-inventory-service:latest
+    port: 8081
+    dbSecret: inventory-service-db-credentials
+    healthProbe: true
+    waitFor:
+      - host: inventory-postgres
+        port: 5432
+      - host: order-redis
+        port: 6379
+      - host: order-kafka
+        port: 9092
+
+  payment-service:
+    image: order-service-payment-service:latest
+    port: 8082
+    dbSecret: payment-service-db-credentials
+    healthProbe: true
+    waitFor:
+      - host: payment-postgres
+        port: 5432
+      - host: order-redis
+        port: 6379
+      - host: order-kafka
+        port: 9092
+
+  search-indexer-service:
+    image: order-service-search-indexer-service:latest
+    port: 8083
+    dbSecret: ""
+    healthProbe: false
+    waitFor:
+      - host: order-kafka
+        port: 9092
+      - host: order-elasticsearch
+        port: 9200
