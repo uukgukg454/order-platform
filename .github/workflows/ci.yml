@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -28,6 +30,11 @@ jobs:
 
       - name: Run integration tests (Testcontainers)
         run: .\gradlew.bat integrationTest --no-daemon
+
+      - name: Run SonarCloud analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: .\gradlew.bat sonar --no-daemon
 
       - name: Upload JaCoCo coverage reports
         if: always()

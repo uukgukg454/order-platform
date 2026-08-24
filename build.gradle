@@ -1,3 +1,7 @@
+plugins {
+    id "org.sonarqube" version "7.3.1.8318"
+}
+
 // Root build.gradle for the order-platform multi-module build. Deliberately
 // minimal: only configuration meant to apply across every subproject lives
 // here (shared repositories, the shared Java toolchain version). Each
@@ -24,5 +28,18 @@ subprojects {
                 languageVersion = JavaLanguageVersion.of(21)
             }
         }
+    }
+}
+
+sonar {
+    properties {
+        property "sonar.projectKey", "uukgukg454_order-platform"
+        property "sonar.organization", "uukgukg454"
+        property "sonar.coverage.jacoco.xmlReportPaths", [
+            "order-service/build/reports/jacoco/test/jacocoTestReport.xml",
+            "inventory-service/build/reports/jacoco/test/jacocoTestReport.xml",
+            "payment-service/build/reports/jacoco/test/jacocoTestReport.xml",
+            "search-indexer-service/build/reports/jacoco/test/jacocoTestReport.xml"
+        ].join(",")
     }
 }
