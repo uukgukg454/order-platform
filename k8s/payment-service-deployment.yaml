@@ -1,3 +1,8 @@
+# SUPERSEDED (Phase 8 Helm conversion) — this hand-rolled Deployment/Service
+# is no longer applied to the cluster. payment-service now runs via the
+# order-platform Helm chart (see helm/order-platform/). Kept here for
+# reference only. Do NOT kubectl apply this file — it will conflict with
+# the Helm-managed Service of the same name.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
