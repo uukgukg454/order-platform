@@ -56,3 +56,16 @@ services:
         port: 9092
       - host: order-elasticsearch
         port: 9200
+
+# Routes external HTTP traffic into the cluster, via the ingress-nginx
+# controller enabled through `minikube addons enable ingress`. Path-based
+# only for now (no host rule) so it works directly against `minikube ip`
+# without needing a hosts-file entry - only order-service is exposed,
+# matching the original Phase 8 plan.
+ingress:
+  enabled: true
+  className: nginx
+  path: /
+  pathType: Prefix
+  service: order-service
+  port: 8080
