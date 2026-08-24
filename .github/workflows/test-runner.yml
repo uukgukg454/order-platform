@@ -1,0 +1,21 @@
+name: Test self-hosted runner
+
+# Triggered on every push for now, just to get quick feedback while we
+# confirm the self-hosted runner setup works end to end. Real pipeline
+# workflows (build/test on PR, deploy only on merge to main) come next.
+on: [push]
+
+jobs:
+  test-runner:
+    runs-on: self-hosted
+    steps:
+      - name: Confirm runner identity
+        run: |
+          echo "Running on: $env:COMPUTERNAME"
+          echo "Current user: $env:USERNAME"
+
+      - name: Confirm kubectl can reach minikube
+        run: kubectl get pods -n order-platform
+
+      - name: Confirm helm is available
+        run: helm version
