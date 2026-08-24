@@ -1,3 +1,8 @@
+# SUPERSEDED (Phase 8 Helm conversion) — this hand-rolled Deployment/Service
+# is no longer applied to the cluster. order-redis now runs via the Bitnami
+# redis chart (see helm/order-redis/values.yaml) plus
+# k8s/order-redis-alias-service.yaml. Kept here for reference only. Do NOT
+# kubectl apply this file — it will conflict with the Helm-managed Service.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

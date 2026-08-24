@@ -8,4 +8,4 @@ app:
 
 spring:
   kafka:
-    bootstrap-servers: order-kafka:29092
+    bootstrap-servers: order-kafka:9092

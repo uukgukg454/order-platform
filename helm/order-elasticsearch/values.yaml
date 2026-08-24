@@ -1,0 +1,61 @@
+# Overrides for the Bitnami elasticsearch chart, replacing the hand-rolled
+# k8s/order-elasticsearch-deployment.yaml.
+#
+# image.tag is pinned to 8.15.0 (not the chart's current default 9.1.2)
+# deliberately: search-indexer-service's build.gradle pins its Elasticsearch
+# client to co.elastic.clients:elasticsearch-java:8.15.5 specifically to
+# match this server version (there's an explicit comment there warning that
+# Spring Data Elasticsearch's own default client targets 9.x). Installing
+# the chart's default 9.1.2 silently broke that already-documented
+# version-parity decision - writes still worked (basic index API is broadly
+# compatible across the major version boundary) but searches came back
+# empty with no error surfaced anywhere, client or server side. Both
+# image.* and sysctlImage.* point at the frozen bitnamilegacy registry -
+# same reasoning as order-kafka: dated/versioned tags moved off
+# docker.io/bitnami after Broadcom's August 2025 licensing change.
+#
+# The chart defaults to THREE separate node pools (master, data, coordinating)
+# plus a fourth (ingest) - six-plus pods total, sized for a real production
+# cluster. master.masterOnly=false alone does NOT broaden a master node's
+# roles (confirmed via `helm template` - it still rendered
+# ELASTICSEARCH_NODE_ROLES="master" only). The actual mechanism is
+# master.extraRoles, which appends data+ingest onto the single master node,
+# collapsing everything to one combined node - matching the existing
+# discovery.type=single-node hand-rolled setup. "coordinating" isn't a real
+# assignable ES role; any node with other roles can already coordinate, so
+# it doesn't need to appear in extraRoles.
+#
+# persistence disabled to match the hand-rolled Deployment (also ephemeral).
+global:
+  security:
+    allowInsecureImages: true
+
+image:
+  registry: docker.io
+  repository: bitnamilegacy/elasticsearch
+  tag: 8.15.0-debian-12-r2
+
+sysctlImage:
+  registry: docker.io
+  repository: bitnamilegacy/os-shell
+  tag: 12-debian-12-r50
+
+master:
+  replicaCount: 1
+  masterOnly: false
+  extraRoles:
+    - data
+    - ingest
+  persistence:
+    enabled: false
+
+data:
+  replicaCount: 0
+
+coordinating:
+  replicaCount: 0
+
+ingest:
+  replicaCount: 0
+
+fullnameOverride: order-elasticsearch

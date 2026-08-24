@@ -1,0 +1,11 @@
+{{- range $name, $svc := .Values.services }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}-config
+  namespace: {{ $.Release.Namespace }}
+data:
+  SPRING_PROFILES_ACTIVE: {{ $.Values.common.springProfile | quote }}
+  JAVA_TOOL_OPTIONS: {{ $.Values.common.javaToolOptions | quote }}
+---
+{{- end }}

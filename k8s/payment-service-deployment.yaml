@@ -1,3 +1,8 @@
+# SUPERSEDED (Phase 8 Helm conversion) — this hand-rolled Deployment/Service
+# is no longer applied to the cluster. payment-service now runs via the
+# order-platform Helm chart (see helm/order-platform/). Kept here for
+# reference only. Do NOT kubectl apply this file — it will conflict with
+# the Helm-managed Service of the same name.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -22,7 +27,7 @@ spec:
             - |
               until nc -z payment-postgres 5432; do echo waiting for payment-postgres; sleep 2; done
               until nc -z order-redis 6379; do echo waiting for order-redis; sleep 2; done
-              until nc -z order-kafka 29092; do echo waiting for order-kafka; sleep 2; done
+              until nc -z order-kafka 9092; do echo waiting for order-kafka; sleep 2; done
       containers:
         - name: payment-service
           image: order-service-payment-service:latest

@@ -13,9 +13,11 @@ spring:
     redis:
       host: order-redis
   kafka:
-    # order-kafka:29092 — the real internal PLAINTEXT listener, matching
-    # inventory-service/payment-service/search-indexer-service's own
-    # application-k8s.yml. Port 9092 is the PLAINTEXT_HOST listener,
-    # advertised as localhost:9092 — unusable from inside another pod,
-    # since "localhost" there resolves to that pod itself, not the broker.
-    bootstrap-servers: order-kafka:29092
+    # order-kafka:9092 — the Bitnami kafka chart's client listener port
+    # (see helm/order-kafka/values.yaml), not the dual PLAINTEXT/
+    # PLAINTEXT_HOST split the old hand-rolled k8s/order-kafka-deployment.yaml
+    # used on 29092/9092. The chart exposes one client listener, forced to
+    # PLAINTEXT, on 9092 for every client regardless of where it connects
+    # from — matching inventory-service/payment-service/search-indexer-service's
+    # own application-k8s.yml.
+    bootstrap-servers: order-kafka:9092

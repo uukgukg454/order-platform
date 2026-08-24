@@ -1,0 +1,6 @@
+apiVersion: v2
+name: order-platform
+description: Helm chart for the order-platform app services (order-service, inventory-service, payment-service, search-indexer-service)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
