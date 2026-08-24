@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Phase 8 Deep Dive — the order-platform Helm chart</title>
+<style>
+  :root {
+    --text: #1b1f24;
+    --text-dim: #4b5563;
+    --text-faint: #6b7280;
+    --bg: #ffffff;
+    --bg-alt: #f6f7f9;
+    --border: #d9dce1;
+    --code-bg: #f2f3f5;
+    --code-text: #1b1f24;
+    --accent: #2354a6;
+    --accent-soft: #e8eefb;
+    --warn-bg: #fff7e6;
+    --warn-border: #e0a72c;
+    --warn-text: #7a5310;
+    --good-bg: #eaf6ee;
+    --good-border: #3aa063;
+    --good-text: #1f6b3d;
+    --box-bg: #f6f7f9;
+    --box-border: #c9ced6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --text: #e8eaed;
+      --text-dim: #a8adb6;
+      --text-faint: #767c86;
+      --bg: #14161a;
+      --bg-alt: #1b1e24;
+      --border: #30343c;
+      --code-bg: #0f1114;
+      --code-text: #d9dde2;
+      --accent: #6ea8fe;
+      --accent-soft: #1c2a3d;
+      --warn-bg: #2e2510;
+      --warn-border: #a97a26;
+      --warn-text: #e4b563;
+      --good-bg: #10241a;
+      --good-border: #2f8055;
+      --good-text: #7fd9a6;
+      --box-bg: #1b1e24;
+      --box-border: #343941;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    line-height: 1.65;
+    margin: 0;
+  }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 48px 28px 120px; }
+  header.title { border-bottom: 3px solid var(--accent); padding-bottom: 24px; margin-bottom: 32px; }
+  header.title .eyebrow {
+    text-transform: uppercase; letter-spacing: .08em; font-size: .78rem; font-weight: 700;
+    color: var(--accent); margin-bottom: 8px;
+  }
+  header.title h1 { font-size: 2rem; margin: 0 0 10px; line-height: 1.25; }
+  header.title p.sub { color: var(--text-dim); font-size: 1.02rem; margin: 0; max-width: 68ch; }
+
+  nav.toc {
+    background: var(--bg-alt); border: 1px solid var(--border); border-radius: 8px;
+    padding: 18px 22px; margin-bottom: 44px; font-size: .92rem;
+  }
+  nav.toc div.label {
+    font-weight: 700; text-transform: uppercase; font-size: .72rem; letter-spacing: .06em;
+    color: var(--text-dim); margin-bottom: 8px;
+  }
+  nav.toc ol { margin: 0; padding-left: 20px; }
+  nav.toc li { margin: 3px 0; }
+  nav.toc a { color: var(--accent); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+
+  section { margin-bottom: 56px; scroll-margin-top: 16px; }
+  h2 { font-size: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-top: 0; scroll-margin-top: 16px; }
+  h3 { font-size: 1.15rem; margin-top: 32px; scroll-margin-top: 16px; }
+  h4 { font-size: 1rem; margin-top: 22px; margin-bottom: 8px; }
+  p { max-width: 76ch; }
+  p.wide, div.wide { max-width: none; }
+
+  pre {
+    background: var(--code-bg); color: var(--code-text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 14px 16px; overflow-x: auto; font-size: .84rem;
+    line-height: 1.5; margin: 12px 0 18px;
+  }
+  code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; }
+  p code, li code, td code {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 3px;
+    padding: 1px 5px; font-size: .88em; color: var(--code-text);
+  }
+  .filetag {
+    display: inline-block; font-family: Consolas, monospace; font-size: .76rem;
+    background: var(--accent-soft); color: var(--accent); border-radius: 4px;
+    padding: 2px 8px; margin-bottom: 6px;
+  }
+
+  table.annot { width: 100%; border-collapse: collapse; margin: 14px 0 22px; font-size: .88rem; }
+  table.annot th, table.annot td { text-align: left; padding: 9px 12px; border: 1px solid var(--border); vertical-align: top; }
+  table.annot th { background: var(--bg-alt); font-size: .74rem; text-transform: uppercase; letter-spacing: .04em; color: var(--text-dim); }
+  table.annot td.code { font-family: Consolas, monospace; font-size: .8rem; white-space: pre-wrap; background: var(--code-bg); width: 38%; }
+
+  .callout { background: var(--warn-bg); border: 1px solid var(--warn-border); border-radius: 6px; padding: 12px 16px; margin: 16px 0; font-size: .92rem; }
+  .callout .label { font-weight: 700; text-transform: uppercase; font-size: .7rem; letter-spacing: .05em; display: block; margin-bottom: 4px; color: var(--warn-text); }
+  .verified { background: var(--good-bg); border: 1px solid var(--good-border); border-radius: 6px; padding: 12px 16px; margin: 16px 0; font-size: .92rem; }
+  .verified .label { font-weight: 700; text-transform: uppercase; font-size: .7rem; letter-spacing: .05em; display: block; margin-bottom: 4px; color: var(--good-text); }
+
+  .diagram { border: 1px solid var(--border); border-radius: 10px; background: var(--bg-alt); padding: 26px 20px; margin: 18px 0 8px; }
+  .diagram-caption { font-size: .85rem; color: var(--text-dim); margin-top: 6px; margin-bottom: 28px; }
+  .stage { display: flex; flex-direction: column; align-items: center; gap: 0; }
+  .box {
+    width: 100%; max-width: 620px; background: var(--box-bg); border: 1.5px solid var(--box-border);
+    border-radius: 8px; padding: 14px 18px; text-align: center;
+  }
+  .box .t { font-weight: 700; font-size: .92rem; margin-bottom: 3px; }
+  .box .d { font-size: .8rem; color: var(--text-dim); }
+  .box.accent { border-color: var(--accent); background: var(--accent-soft); }
+  .arrow { display: flex; flex-direction: column; align-items: center; margin: 6px 0; }
+  .arrow .glyph { font-size: 1.4rem; color: var(--accent); line-height: 1; }
+  .arrow .lbl { font-size: .76rem; color: var(--text-dim); text-align: center; max-width: 480px; margin-top: 2px; }
+  .row2 { display: flex; gap: 16px; width: 100%; max-width: 620px; }
+  .row2 .box { max-width: none; flex: 1; }
+  .loopback { font-size: .8rem; color: var(--accent); text-align: center; margin-top: 10px; max-width: 560px; }
+
+  hr.rule { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+  footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border); font-size: .82rem; color: var(--text-dim); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="title">
+  <div class="eyebrow">order-platform &middot; Phase 8 study reference</div>
+  <h1>How the order-platform Helm chart actually works</h1>
+  <p class="sub">Grounded entirely in the real files under <code>helm/order-platform/</code> — every YAML snippet below is either quoted directly from those files or is real <code>helm template</code> output, generated by actually running the command against this chart.</p>
+</header>
+
+<nav class="toc">
+  <div class="label">Contents</div>
+  <ol>
+    <li><a href="#fundamentals">Helm templating fundamentals</a></li>
+    <li><a href="#timeline">When rendering actually happens</a></li>
+    <li><a href="#services-map">The <code>services</code> map, field by field</a></li>
+    <li><a href="#range">The range mechanism, annotated</a></li>
+    <li><a href="#worked-search">Worked example: search-indexer-service</a></li>
+    <li><a href="#worked-waitfor">Worked example: inventory-service's waitFor</a></li>
+    <li><a href="#pipeline">The full pipeline, top to bottom</a></li>
+    <li><a href="#why">Why this design, and its real cost</a></li>
+  </ol>
+</nav>
+
+<!-- ========== 1 ========== -->
+<section id="fundamentals">
+<h2>1. Helm templating fundamentals</h2>
+
+<p class="wide">A Helm <strong>chart</strong> is a directory with a specific shape. <code>helm/order-platform/</code> has all three required pieces: <code>Chart.yaml</code> (chart metadata — name, version), <code>values.yaml</code> (the default configuration data every template reads from), and <code>templates/</code> (files that mix literal YAML with Go template directives, rendered against those values to produce real Kubernetes manifests).</p>
+
+<div class="filetag">helm/order-platform/Chart.yaml</div>
+<pre><code>apiVersion: v2
+name: order-platform
+description: Helm chart for the order-platform app services (order-service, inventory-service, payment-service, search-indexer-service)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"</code></pre>
+
+<p class="wide"><code>values.yaml</code> supplies the data structure every template accesses as <code>.Values</code> — in this chart, three top-level keys: <code>common</code> (settings shared by every service), <code>services</code> (a map keyed by service name, holding what differs per service — the subject of <a href="#services-map">§3</a>), and <code>ingress</code> (the routing config added afterward). Nothing in a template is hardcoded that could instead live here — that's the entire reason the file exists.</p>
+
+<h3>Built-in objects actually referenced in this chart</h3>
+<table class="annot">
+<tr><th>Object</th><th>Used where</th><th>What it is</th></tr>
+<tr><td class="code">.Values</td><td>Every template</td><td>This chart's own <code>values.yaml</code>, merged with anything passed via <code>-f</code>/<code>--set</code> at install time.</td></tr>
+<tr><td class="code">.Release.Namespace</td><td>configmap.yaml, service.yaml, deployment.yaml, ingress.yaml — every <code>metadata.namespace</code> line</td><td>The namespace the release is being installed into (set by <code>-n order-platform</code> on the command line) — not hardcoded anywhere in a template.</td></tr>
+</table>
+
+<div class="callout">
+  <span class="label">Discrepancy worth flagging</span>
+  <code>.Chart</code> is technically available in every template's context too — Helm always injects it, populated from <code>Chart.yaml</code> (<code>.Chart.Name</code> would resolve to <code>order-platform</code>, <code>.Chart.Version</code> to <code>0.1.0</code>). But none of the four templates in this chart actually reference it — not once, checked directly against the files. It's often listed as one of the "core" built-ins in generic Helm tutorials, but this specific chart simply has no use for it: there's nothing in these manifests that needs to know the chart's own name or version.
+</div>
+
+<h3>Go text/template syntax this chart actually uses</h3>
+<ul>
+  <li><code>{{ ... }}</code> — substitution. <code>{{ $name }}</code>, <code>{{ $svc.port }}</code>, <code>{{ $.Release.Namespace }}</code>.</li>
+  <li><code>{{- range $name, $svc := .Values.services }} ... {{- end }}</code> — iterates a map, covered fully in <a href="#range">§4</a>.</li>
+  <li><code>{{- if $svc.dbSecret }} ... {{- end }}</code> — conditionally includes a block, covered in <a href="#worked-search">§5</a>.</li>
+  <li><code>{{ $.Values.common.springProfile | quote }}</code> — the <code>quote</code> pipe function, wrapping the value in double quotes in the output (<code>k8s</code> → <code>"k8s"</code>), from <code>configmap.yaml</code>.</li>
+</ul>
+
+<h3>The <code>{{-</code> / <code>-}}</code> whitespace-trim dashes — what they actually trim, and why</h3>
+<p class="wide">A leading <code>{{-</code> trims all whitespace immediately before the tag, back to and including the preceding newline. A trailing <code>-}}</code> does the same for whatever follows. Every control-flow tag in this chart's templates — every <code>range</code>, <code>if</code>, and <code>end</code> — opens with <code>{{-</code>.</p>
+<p class="wide">The reason is mechanical: each of those tags sits on its own source line for readability, but a <code>range</code>/<code>if</code>/<code>end</code> line carries no actual YAML content of its own — it's pure control flow. Without the leading <code>-</code>, the newline at the end of that source line would still be emitted into the <em>output</em>, because Go's template engine treats everything outside <code>{{ }}</code> — including that trailing newline — as literal text to copy through verbatim. Trim it, and the control-flow line leaves no trace at all in the rendered result.</p>
+<div class="callout">
+  <span class="label">Not just cosmetic here</span>
+  Two of this chart's conditionals — <code>{{- if $svc.dbSecret }}</code> and <code>{{- if $svc.healthProbe }}</code> in <code>deployment.yaml</code> — sit <em>inside</em> a block sequence (the <code>envFrom:</code> list) and a block mapping respectively. An untrimmed blank line landing at the wrong indentation inside a block sequence is exactly the class of thing that produces genuinely invalid YAML, not just extra whitespace — the same failure mode investigated earlier in this project when a linter reported "invalid child element in a block sequence" against this exact file. The trim dashes here aren't a style preference; they're what keeps the false-branch output valid.
+</div>
+</section>
+
+<!-- ========== 2 ========== -->
+<section id="timeline">
+<h2>2. When rendering actually happens</h2>
+
+<p class="wide">Stated plainly, because it's easy to get backwards: <strong>template rendering — every <code>range</code>, every <code>{{ }}</code> substitution, every <code>if</code> — happens entirely on the machine running <code>helm template</code>, <code>helm install</code>, or <code>helm upgrade</code>, before anything is sent to the Kubernetes API server.</strong> It is a local, client-side text-substitution pass over the files in <code>helm/order-platform/</code>. It is not something that happens "at runtime" inside a running Pod, and it has nothing to do with the cluster's own scheduling or execution machinery.</p>
+
+<p class="wide">The output of that render step — captured in full in <a href="#worked-search">§5</a> and <a href="#worked-waitfor">§6</a> — is plain, ordinary Kubernetes YAML with <strong>zero</strong> Helm syntax remaining in it. No <code>{{ }}</code>, no <code>range</code>, no <code>if</code>. <code>kubectl</code> and the API server never see a template at all — only the fully-resolved manifest, indistinguishable from something a human typed by hand. A running container has no idea Helm exists; it just reads environment variables that came from a ConfigMap, the same as it would if that ConfigMap had been applied with a plain <code>kubectl apply -f</code>.</p>
+
+<div class="diagram">
+  <div class="stage">
+    <div class="box"><div class="t">Chart source — in git</div><div class="d">helm/order-platform/values.yaml + templates/*.yaml — has {{ }} placeholders</div></div>
+    <div class="arrow"><span class="glyph">↓</span><span class="lbl"><code>helm template</code> / <code>helm install</code> / <code>helm upgrade</code> — client-side, on your machine, before the API server sees anything</span></div>
+    <div class="box accent"><div class="t">Rendered manifest</div><div class="d">Helm's actual output — plain Kubernetes YAML, zero Helm syntax left</div></div>
+    <div class="arrow"><span class="glyph">↓</span><span class="lbl">kubectl apply — done internally by <code>helm install</code>/<code>helm upgrade</code></span></div>
+    <div class="box"><div class="t">Running Pod</div><div class="d">Reads env vars from the applied ConfigMap/Secret — has no idea Helm exists</div></div>
+  </div>
+</div>
+<p class="diagram-caption">The middle box is the important one: it's the only thing that ever reaches the cluster. Everything above it is a git-tracked source file; everything below it is a live cluster object that came from applying that middle box's content.</p>
+</section>
+
+<!-- ========== 3 ========== -->
+<section id="services-map">
+<h2>3. The <code>services</code> map, field by field</h2>
+
+<div class="filetag">helm/order-platform/values.yaml</div>
+<pre><code>services:
+  order-service:
+    image: order-service-order-service:latest
+    port: 8080
+    dbSecret: order-service-db-credentials
+    healthProbe: true
+    waitFor:
+      - host: order-postgres
+        port: 5432
+      - host: order-redis
+        port: 6379
+
+  inventory-service:
+    image: order-service-inventory-service:latest
+    port: 8081
+    dbSecret: inventory-service-db-credentials
+    healthProbe: true
+    waitFor:
+      - host: inventory-postgres
+        port: 5432
+      - host: order-redis
+        port: 6379
+      - host: order-kafka
+        port: 9092
+
+  payment-service:
+    image: order-service-payment-service:latest
+    port: 8082
+    dbSecret: payment-service-db-credentials
+    healthProbe: true
+    waitFor:
+      - host: payment-postgres
+        port: 5432
+      - host: order-redis
+        port: 6379
+      - host: order-kafka
+        port: 9092
+
+  search-indexer-service:
+    image: order-service-search-indexer-service:latest
+    port: 8083
+    dbSecret: ""
+    healthProbe: false
+    waitFor:
+      - host: order-kafka
+        port: 9092
+      - host: order-elasticsearch
+        port: 9200</code></pre>
+
+<table class="annot">
+<tr><th>Field</th><th>Why it exists — what breaks without it</th></tr>
+<tr><td class="code">image</td><td>All four services build to genuinely different image names (Phase 7's own per-module Dockerfiles). No single hardcoded value could ever be correct for more than one service — this has to come from data.</td></tr>
+<tr><td class="code">port</td><td>Consumed six separate times across the three templates (containerPort, both Service ports, both probe ports). The four services listen on genuinely different ports — 8080/8081/8082/8083, set in each service's own <code>application.yml</code> back in Phase 6 — so a shared template with this hardcoded would simply be wrong for three of the four services.</td></tr>
+<tr><td class="code">dbSecret</td><td>The one field allowed to be empty (<code>""</code> for search-indexer-service) rather than always populated — that emptiness is exactly what the <code>{{- if $svc.dbSecret }}</code> conditional tests. search-indexer-service never had a Postgres dependency, so there's no credential to reference; without this field being data-driven, every service would need either a fabricated <code>secretRef</code> pointing at a Secret that doesn't exist (breaking that Pod's startup) or the template couldn't be shared across all four at all.</td></tr>
+<tr><td class="code">healthProbe</td><td>A plain boolean, false only for search-indexer-service — because that service was never given the Actuator dependency, so it has no <code>/actuator/health</code> to probe. A probe hardcoded unconditionally into the template would misconfigure that one Deployment to poll an endpoint returning 404, and Kubernetes would never mark that Pod ready — a real failure, not a cosmetic one.</td></tr>
+<tr><td class="code">waitFor</td><td>A <em>list</em>, not a scalar — different length per service (2 entries for order-service/search-indexer-service, 3 for inventory-service/payment-service) and different content. This is what forces a <code>range</code> nested inside the outer <code>range</code> (see <a href="#worked-waitfor">§6</a>) — no fixed number of hardcoded lines could express "a different count of dependency checks per service."</td></tr>
+</table>
+</section>
+
+<!-- ========== 4 ========== -->
+<section id="range">
+<h2>4. The range mechanism, annotated</h2>
+
+<p class="wide">All three of <code>configmap.yaml</code>, <code>service.yaml</code>, and <code>deployment.yaml</code> open with the identical line:</p>
+<pre><code>{{- range $name, $svc := .Values.services }}</code></pre>
+<p class="wide">Go's <code>text/template</code> package sorts a map's keys before ranging over it — a deliberate, documented behavior, specifically so that template output is deterministic and reproducible across runs rather than following Go's own maps, whose iteration order is intentionally randomized at the language level. This isn't just asserted here — it's directly confirmed by the actual <code>helm template</code> output captured for this doc: every one of ConfigMap, Service, and Deployment renders in the same order — <strong>inventory-service, order-service, payment-service, search-indexer-service</strong> — alphabetical, not the order the entries happen to appear in <code>values.yaml</code> (which is order-service first).</p>
+<div class="verified">
+  <span class="label">Verified, not assumed</span>
+  Ran <code>helm template order-platform helm/order-platform -n order-platform</code> directly against this chart. The four rendered ConfigMaps appear in exactly that alphabetical order in the real output — confirming the sort-by-key behavior rather than taking it on faith.
+</div>
+<p class="wide"><code>$name</code> binds to the current iteration's map key (a string — <code>"order-service"</code>, etc.); <code>$svc</code> binds to that key's value — the nested <code>image</code>/<code>port</code>/<code>dbSecret</code>/<code>healthProbe</code>/<code>waitFor</code> settings for that one service.</p>
+
+<h3><code>deployment.yaml</code>'s full loop body, annotated</h3>
+<div class="filetag">helm/order-platform/templates/deployment.yaml</div>
+<table class="annot">
+<tr><th>Line(s)</th><th>Annotation</th></tr>
+<tr><td class="code">{{- range $name, $svc := .Values.services }}</td><td>Opens the outer loop. Pure control flow — trimmed, leaves no trace in the output. Everything until the matching <code>{{- end }}</code> at the bottom renders once per service, four times total.</td></tr>
+<tr><td class="code">apiVersion: apps/v1
+kind: Deployment</td><td>Static. Identical text in every one of the four rendered copies.</td></tr>
+<tr><td class="code">metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}</td><td><code>name</code> comes from the loop's current map key. <code>namespace</code> comes from <code>.Release.Namespace</code> — the same value on every iteration (it's about the release, not the service).</td></tr>
+<tr><td class="code">spec:
+  replicas: 1</td><td>Static — hardcoded to 1 for every service. Real limitation worth naming: there's no <code>replicas</code> field in the <code>services</code> map, so scaling one service independently isn't expressible through this chart as written today.</td></tr>
+<tr><td class="code">selector:
+  matchLabels:
+    app: {{ $name }}
+...
+  template:
+    metadata:
+      labels:
+        app: {{ $name }}</td><td><code>{{ $name }}</code> again, twice — the selector and the Pod template's own labels have to match (an ordinary Kubernetes requirement, not Helm-specific), so both need the same interpolated value.</td></tr>
+<tr><td class="code">      initContainers:
+        - name: wait-for-deps
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              {{- range $svc.waitFor }}
+              until nc -z {{ .host }} {{ .port }}; do echo waiting for {{ .host }}; sleep 2; done
+              {{- end }}</td><td>A <em>second, nested</em> range — over <code>$svc.waitFor</code>, the current service's own dependency list. This is range inside range: the outer loop is over services, the inner loop is over that one service's own wait-for entries. Fully traced in <a href="#worked-waitfor">§6</a>.</td></tr>
+<tr><td class="code">      containers:
+        - name: {{ $name }}
+          image: {{ $svc.image }}</td><td>Both interpolated — <code>$name</code> (the map key again) and <code>$svc.image</code> (per-service data).</td></tr>
+<tr><td class="code">          imagePullPolicy: {{ $.Values.common.imagePullPolicy }}</td><td>Comes from <code>common</code>, not <code>$svc</code> — the same value (<code>IfNotPresent</code>) on every iteration, since it's not something that actually differs between services. Worth contrasting directly against the line above it: same visual shape, different data source.</td></tr>
+<tr><td class="code">          ports:
+            - containerPort: {{ $svc.port }}</td><td>Per-service data again.</td></tr>
+<tr><td class="code">          envFrom:
+            - configMapRef:
+                name: {{ $name }}-config
+            {{- if $svc.dbSecret }}
+            - secretRef:
+                name: {{ $svc.dbSecret }}
+            {{- end }}</td><td><code>configMapRef</code> is unconditional — every service gets one. <code>secretRef</code> only renders if <code>$svc.dbSecret</code> is non-empty. Fully worked in <a href="#worked-search">§5</a>.</td></tr>
+<tr><td class="code">          {{- if $svc.healthProbe }}
+          readinessProbe: ...
+          livenessProbe: ...
+          {{- end }}</td><td>The entire probe block is conditional on the boolean. Also worked in <a href="#worked-search">§5</a>.</td></tr>
+<tr><td class="code">---
+{{- end }}</td><td><code>---</code> is the YAML document separator — needed because this one template file produces <em>multiple independent</em> Deployment documents, one per loop iteration, all concatenated into a single rendered output. <code>{{- end }}</code> closes the outer range.</td></tr>
+</table>
+<p class="wide">The net effect: one ~55-line template body, executed four times with four different <code>$name</code>/<code>$svc</code> bindings, produces four completely independent <code>Deployment</code> objects — verified directly in the next two sections.</p>
+</section>
+
+<!-- ========== 5 ========== -->
+<section id="worked-search">
+<h2>5. Worked example: search-indexer-service</h2>
+
+<p class="wide">search-indexer-service is the one service that actually exercises both conditionals — no database, no health endpoint. Its exact <code>values.yaml</code> entry:</p>
+<pre><code>  search-indexer-service:
+    image: order-service-search-indexer-service:latest
+    port: 8083
+    dbSecret: ""
+    healthProbe: false
+    waitFor:
+      - host: order-kafka
+        port: 9092
+      - host: order-elasticsearch
+        port: 9200</code></pre>
+
+<p class="wide">And its actual, complete rendered Deployment — real <code>helm template</code> output, not reconstructed by hand:</p>
+<div class="filetag">helm template order-platform helm/order-platform -n order-platform — search-indexer-service Deployment</div>
+<pre><code>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: search-indexer-service
+  namespace: order-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: search-indexer-service
+  template:
+    metadata:
+      labels:
+        app: search-indexer-service
+    spec:
+      initContainers:
+        - name: wait-for-deps
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z order-kafka 9092; do echo waiting for order-kafka; sleep 2; done
+              until nc -z order-elasticsearch 9200; do echo waiting for order-elasticsearch; sleep 2; done
+      containers:
+        - name: search-indexer-service
+          image: order-service-search-indexer-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8083
+          envFrom:
+            - configMapRef:
+                name: search-indexer-service-config</code></pre>
+
+<div class="verified">
+  <span class="label">What's missing, and why</span>
+  No <code>secretRef</code> under <code>envFrom</code> — <code>dbSecret: ""</code> is falsy in Go templates, so <code>{{- if $svc.dbSecret }}...{{- end }}</code> evaluated false and the whole block vanished, cleanly, with no stray blank line (the trim dashes from §1 at work). No <code>readinessProbe</code> or <code>livenessProbe</code> at all — <code>healthProbe: false</code>, same mechanism. The container spec simply ends after <code>envFrom</code>.
+</div>
+
+<p class="wide">Contrast with order-service's rendered Deployment — same template, same loop body, different <code>$svc</code> values, both conditionals true:</p>
+<div class="filetag">helm template order-platform helm/order-platform -n order-platform — order-service Deployment</div>
+<pre><code>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-service
+  namespace: order-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: order-service
+  template:
+    metadata:
+      labels:
+        app: order-service
+    spec:
+      initContainers:
+        - name: wait-for-deps
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z order-postgres 5432; do echo waiting for order-postgres; sleep 2; done
+              until nc -z order-redis 6379; do echo waiting for order-redis; sleep 2; done
+      containers:
+        - name: order-service
+          image: order-service-order-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: order-service-config
+            - secretRef:
+                name: order-service-db-credentials
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10</code></pre>
+<p class="wide">Same template file, same 55 lines of source — two structurally different Kubernetes objects, purely because the data fed into <code>$svc</code> differed. That's the entire mechanism this chart relies on.</p>
+</section>
+
+<!-- ========== 6 ========== -->
+<section id="worked-waitfor">
+<h2>6. Worked example: inventory-service's <code>waitFor</code>, traced end to end</h2>
+
+<h4>1. The exact source data</h4>
+<div class="filetag">helm/order-platform/values.yaml, inventory-service entry</div>
+<pre><code>    waitFor:
+      - host: inventory-postgres
+        port: 5432
+      - host: order-redis
+        port: 6379
+      - host: order-kafka
+        port: 9092</code></pre>
+
+<h4>2. The exact template lines that consume it</h4>
+<div class="filetag">helm/order-platform/templates/deployment.yaml</div>
+<pre><code>          command:
+            - sh
+            - -c
+            - |
+              {{- range $svc.waitFor }}
+              until nc -z {{ .host }} {{ .port }}; do echo waiting for {{ .host }}; sleep 2; done
+              {{- end }}</code></pre>
+<p class="wide">A precise, easy-to-miss detail: inside this inner <code>range $svc.waitFor</code>, the dot (<code>.</code>) rebinds to each individual list item — <em>not</em> to <code>$svc</code>. That's why <code>.host</code>/<code>.port</code> work without needing to write <code>$svc</code> again inside the loop. This only works cleanly because the <em>outer</em> range used named variables (<code>range $name, $svc := .Values.services</code>) instead of touching the dot-context — so the outer loop's data stays reachable as <code>$svc</code> throughout, while the inner loop is free to rebind <code>.</code> to whatever it's iterating without losing anything.</p>
+
+<h4>3. The exact resulting lines in rendered output</h4>
+<div class="filetag">helm template order-platform helm/order-platform -n order-platform — inventory-service Deployment, command block</div>
+<pre><code>              until nc -z inventory-postgres 5432; do echo waiting for inventory-postgres; sleep 2; done
+              until nc -z order-redis 6379; do echo waiting for order-redis; sleep 2; done
+              until nc -z order-kafka 9092; do echo waiting for order-kafka; sleep 2; done</code></pre>
+<p class="wide">Three list entries in <code>values.yaml</code> → three <code>until nc -z ...</code> lines in the rendered shell script, one inner-loop iteration each. Nothing invented — this is the literal, unedited relevant slice of the real render captured for this document.</p>
+</section>
+
+<!-- ========== 7 ========== -->
+<section id="pipeline">
+<h2>7. The full pipeline, top to bottom</h2>
+
+<div class="diagram">
+  <div class="stage">
+    <div class="row2">
+      <div class="box"><div class="t">values.yaml</div><div class="d">source of truth for what differs per service</div></div>
+      <div class="box"><div class="t">templates/*.yaml</div><div class="d">source of truth for what's shared</div></div>
+    </div>
+    <div class="arrow"><span class="glyph">↓</span><span class="lbl"><code>helm template</code> / <code>install</code> / <code>upgrade</code> — client-side</span></div>
+    <div class="box accent"><div class="t">Rendered Deployment / Service / ConfigMap / Ingress YAML</div><div class="d">plain Kubernetes objects — no Helm syntax left</div></div>
+    <div class="arrow"><span class="glyph">↓</span><span class="lbl">kubectl apply — done internally by <code>helm install</code>/<code>upgrade</code></span></div>
+    <div class="box"><div class="t">Live objects in the order-platform namespace</div><div class="d">stored in etcd, visible via <code>kubectl get</code></div></div>
+    <div class="arrow"><span class="glyph">↓</span><span class="lbl">kubelet watches the API server, schedules matching Pods</span></div>
+    <div class="box"><div class="t">Pod — e.g. inventory-service — container starts</div></div>
+    <div class="arrow"><span class="glyph">↓</span><span class="lbl">container reads its env vars at startup</span></div>
+    <div class="box"><div class="t">SPRING_PROFILES_ACTIVE / JAVA_TOOL_OPTIONS</div><div class="d">sourced from the ConfigMap rendered from this same values.yaml entry</div></div>
+    <div class="loopback">↩ Same <code>services.inventory-service</code> entry that set the image, port, and waitFor list also determined what this Pod's env vars are — one <code>range</code> iteration, expressed twice (Deployment env wiring + ConfigMap content), closing the loop back to the top.</div>
+  </div>
+</div>
+</section>
+
+<!-- ========== 8 ========== -->
+<section id="why">
+<h2>8. Why this design, and its real cost</h2>
+
+<p class="wide">This project has a direct, lived comparison available, not a hypothetical one: the individual hand-rolled <code>k8s/order-service-deployment.yaml</code>, <code>k8s/inventory-service-deployment.yaml</code>, <code>k8s/payment-service-deployment.yaml</code>, and <code>k8s/search-indexer-service-deployment.yaml</code> files (plus their four matching <code>*-configmap.yaml</code> files) still exist in this repository — now marked <code>SUPERSEDED</code>, but still readable. That's four separate ~50–60 line files that were, before this chart existed, close to 90% identical boilerplate: same <code>apiVersion</code>/<code>kind</code> structure, same <code>selector</code>/<code>label</code> pattern, same <code>envFrom</code>/probe shape — differing only in the handful of fields this chart's <code>services</code> map now isolates.</p>
+
+<p class="wide">The DRY win is real: a future change to, say, the probe path or <code>imagePullPolicy</code> is one edit to <code>deployment.yaml</code> instead of four (soon more, as services are added) individually-maintained files that have to be kept consistent by hand. Adding a fifth service means adding one entry to <code>values.yaml</code>, not writing three new template files.</p>
+
+<p class="wide">The cost is equally real, and worth stating plainly rather than glossing over: <strong>the actual shape of any one service's Deployment is no longer visible by reading a single flat file.</strong> To know whether <code>search-indexer-service</code> gets a <code>secretRef</code> or a <code>livenessProbe</code>, you have to mentally execute the template against its specific <code>values.yaml</code> entry — read the <code>range</code>, evaluate the <code>if</code>s, understand what the whitespace-trim dashes do to the output — exactly the exercise §5 and §6 walked through by hand. A hand-rolled per-service file never asks that of a reader; everything about that one Deployment is right there, linearly, top to bottom. This chart trades that immediacy for not repeating yourself four times over — a genuine trade-off between two real costs, not a strictly-better replacement for the files it superseded.</p>
+</section>
+
+<footer>
+  order-platform &middot; Phase 8 (Helm) study reference. Every quoted YAML snippet above is either copied directly from <code>helm/order-platform/Chart.yaml</code>, <code>values.yaml</code>, <code>templates/configmap.yaml</code>, <code>templates/service.yaml</code>, <code>templates/deployment.yaml</code>, <code>templates/ingress.yaml</code>, or is real, unedited output from <code>helm template order-platform helm/order-platform -n order-platform</code> run against this chart.
+</footer>
+
+</div>
+</body>
+</html>
