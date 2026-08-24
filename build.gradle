@@ -35,11 +35,5 @@ sonar {
     properties {
         property "sonar.projectKey", "uukgukg454_order-platform"
         property "sonar.organization", "uukgukg454"
-        property "sonar.coverage.jacoco.xmlReportPaths", [
-            "order-service/build/reports/jacoco/test/jacocoTestReport.xml",
-            "inventory-service/build/reports/jacoco/test/jacocoTestReport.xml",
-            "payment-service/build/reports/jacoco/test/jacocoTestReport.xml",
-            "search-indexer-service/build/reports/jacoco/test/jacocoTestReport.xml"
-        ].join(",")
     }
 }
