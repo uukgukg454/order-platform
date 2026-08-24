@@ -1,0 +1,17 @@
+# Overrides for the Bitnami postgresql chart, used to swap in for the
+# hand-rolled k8s/inventory-postgres-deployment.yaml. Mirrors the exact
+# pattern already used for helm/order-postgres/values.yaml: existingSecret
+# replaces the old hardcoded POSTGRES_PASSWORD, database matches the old
+# POSTGRES_DB value exactly, persistence stays disabled (the old manifest
+# had no volume either, so this changes nothing about data durability).
+fullnameOverride: inventory-postgres
+
+auth:
+  existingSecret: inventory-postgres-credentials
+  secretKeys:
+    adminPasswordKey: postgres-password
+  database: inventory
+
+primary:
+  persistence:
+    enabled: false

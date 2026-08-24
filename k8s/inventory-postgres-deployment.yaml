@@ -1,3 +1,9 @@
+# SUPERSEDED (Phase 8 Helm conversion, follow-up) — replaced by the Bitnami
+# postgresql chart, see helm/inventory-postgres/values.yaml. This
+# Deployment/Service pair is no longer applied to the cluster; kept here
+# for reference only. The live inventory-postgres StatefulSet/Service are
+# managed by Helm (helm install inventory-postgres bitnami/postgresql
+# -n order-platform -f helm/inventory-postgres/values.yaml).
 apiVersion: apps/v1
 kind: Deployment
 metadata:
