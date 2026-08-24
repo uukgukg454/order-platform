@@ -83,3 +83,18 @@ jobs:
         run: |
           docker build -f ${{ matrix.service }}/Dockerfile -t ghcr.io/uukgukg454/order-platform-${{ matrix.service }}:${{ github.sha }} .
           docker push ghcr.io/uukgukg454/order-platform-${{ matrix.service }}:${{ github.sha }}
+
+  deploy:
+    name: Deploy to minikube via Helm
+    needs: build-and-push-images
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure GHCR pull secret exists
+        run: kubectl create secret docker-registry ghcr-pull-secret --docker-server=ghcr.io --docker-username=${{ github.actor }} --docker-password=${{ secrets.GHCR_PAT }} -n order-platform --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy via Helm
+        run: helm upgrade --install order-platform helm/order-platform -n order-platform --set services.order-service.image=ghcr.io/uukgukg454/order-platform-order-service:${{ github.sha }} --set services.inventory-service.image=ghcr.io/uukgukg454/order-platform-inventory-service:${{ github.sha }} --set services.payment-service.image=ghcr.io/uukgukg454/order-platform-payment-service:${{ github.sha }} --set services.search-indexer-service.image=ghcr.io/uukgukg454/order-platform-search-indexer-service:${{ github.sha }}
