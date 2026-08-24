@@ -1,0 +1,102 @@
+name: CI
+
+# Runs on every PR opened against main, and again after merge to main.
+# This is the build+unit-test stage only - integration tests, the
+# SonarCloud quality gate, image build/push, and deploy are separate
+# stages added on top of this one.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build and unit test all modules
+        run: .\gradlew.bat build --no-daemon
+
+      - name: Run integration tests (Testcontainers)
+        run: .\gradlew.bat integrationTest --no-daemon
+
+      - name: Run SonarCloud analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: .\gradlew.bat sonar --no-daemon
+
+      - name: Upload JaCoCo coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-reports
+          path: '**/build/reports/jacoco/**'
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: '**/build/reports/tests/**'
+
+      - name: Upload integration test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-reports
+          path: '**/build/reports/tests/integrationTest/**'
+
+  build-and-push-images:
+    name: Build and push images to GHCR
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: self-hosted
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        service: [order-service, inventory-service, payment-service, search-indexer-service]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.service }} image
+        run: |
+          docker build -f ${{ matrix.service }}/Dockerfile -t ghcr.io/uukgukg454/order-platform-${{ matrix.service }}:${{ github.sha }} .
+          docker push ghcr.io/uukgukg454/order-platform-${{ matrix.service }}:${{ github.sha }}
+
+  deploy:
+    name: Deploy to minikube via Helm
+    needs: build-and-push-images
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure GHCR pull secret exists
+        env:
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+        run: kubectl create secret docker-registry ghcr-pull-secret --docker-server=ghcr.io --docker-username=${{ github.actor }} --docker-password=$env:GHCR_PAT -n order-platform --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy via Helm
+        run: helm upgrade --install order-platform helm/order-platform -n order-platform --set services.order-service.image=ghcr.io/uukgukg454/order-platform-order-service:${{ github.sha }} --set services.inventory-service.image=ghcr.io/uukgukg454/order-platform-inventory-service:${{ github.sha }} --set services.payment-service.image=ghcr.io/uukgukg454/order-platform-payment-service:${{ github.sha }} --set services.search-indexer-service.image=ghcr.io/uukgukg454/order-platform-search-indexer-service:${{ github.sha }}
