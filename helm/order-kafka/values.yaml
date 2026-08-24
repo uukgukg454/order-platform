@@ -1,0 +1,56 @@
+# Overrides for the Bitnami kafka chart, replacing the hand-rolled
+# k8s/order-kafka-deployment.yaml. controller.replicaCount=1/broker.replicaCount=0
+# matches the chart's own default "combined" KRaft shape (each node is both
+# controller and broker) but scaled to a single node, matching what the
+# hand-rolled Deployment ran and keeping resource usage sane on minikube.
+# All three listener protocols are forced back to PLAINTEXT - the chart
+# defaults to SASL_PLAINTEXT on every listener, which the hand-rolled setup
+# never had (no auth at all, mirroring docker-compose.yml).
+#
+# image.* overrides point at the frozen bitnamilegacy registry: the chart's
+# default image tag (4.0.0-debian-12-r10) was a dated/versioned tag, which
+# moved off docker.io/bitnami after Broadcom's August 2025 licensing change
+# and no longer resolves there (confirmed via "manifest unknown" pull error).
+# bitnamilegacy mirrors the same tag namespace, frozen/unpatched, which is an
+# acceptable trade-off for a learning cluster. global.security.allowInsecureImages
+# has to be explicitly set true to let the chart accept a non-verified image.
+controller:
+  replicaCount: 1
+
+broker:
+  replicaCount: 0
+
+listeners:
+  client:
+    protocol: PLAINTEXT
+  controller:
+    protocol: PLAINTEXT
+  interbroker:
+    protocol: PLAINTEXT
+
+fullnameOverride: order-kafka
+
+global:
+  security:
+    allowInsecureImages: true
+
+image:
+  registry: docker.io
+  repository: bitnamilegacy/kafka
+  tag: 4.0.0-debian-12-r10
+
+# Kafka's own built-in defaults for these are 3 (replication factor) and 2
+# (min in-sync replicas) - sized for a real multi-broker cluster. With only
+# one broker in this single-node setup, internal topics requiring 3-way
+# replication (__transaction_state, __consumer_offsets) can never be created
+# successfully, which silently breaks Spring Kafka's idempotent producer
+# (it needs the transaction coordinator to even initialize a ProducerId).
+# This is the same fix the original hand-rolled order-kafka-deployment.yaml
+# already had via KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR etc. - it
+# just didn't get carried over into this chart's config.
+overrideConfiguration:
+  offsets.topic.replication.factor: "1"
+  transaction.state.log.replication.factor: "1"
+  transaction.state.log.min.isr: "1"
+  default.replication.factor: "1"
+  min.insync.replicas: "1"

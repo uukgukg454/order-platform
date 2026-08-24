@@ -1,0 +1,14 @@
+# Overrides for the Bitnami redis chart, used to swap in for the hand-rolled
+# k8s/order-redis-deployment.yaml. architecture=standalone and auth.enabled=false
+# deliberately match the existing redis:7-alpine behavior (single instance, no
+# password) so this swap is transparent to RedissonConfig - no app code changes.
+# fullnameOverride is set for consistency with order-postgres, though the chart
+# still appends -master/-headless suffixes to the actual Service names, so a
+# separate alias Service is applied afterward to preserve the "order-redis"
+# hostname every app service already expects.
+architecture: standalone
+
+auth:
+  enabled: false
+
+fullnameOverride: order-redis

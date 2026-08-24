@@ -22,7 +22,7 @@ spec:
             - |
               until nc -z payment-postgres 5432; do echo waiting for payment-postgres; sleep 2; done
               until nc -z order-redis 6379; do echo waiting for order-redis; sleep 2; done
-              until nc -z order-kafka 29092; do echo waiting for order-kafka; sleep 2; done
+              until nc -z order-kafka 9092; do echo waiting for order-kafka; sleep 2; done
       containers:
         - name: payment-service
           image: order-service-payment-service:latest

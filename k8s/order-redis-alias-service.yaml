@@ -1,0 +1,19 @@
+# Plain alias Service pointing at the Bitnami redis chart's master pod
+# (selector confirmed via `kubectl get service order-redis-master -o yaml`).
+# Exists so order-service, inventory-service, and payment-service can keep
+# using the hostname "order-redis" they already have in application-k8s.yml,
+# without any app-side changes or image rebuilds - the chart itself names its
+# own Service "order-redis-master", not "order-redis".
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-redis
+  namespace: order-platform
+spec:
+  selector:
+    app.kubernetes.io/component: master
+    app.kubernetes.io/instance: order-redis
+    app.kubernetes.io/name: redis
+  ports:
+    - port: 6379
+      targetPort: 6379

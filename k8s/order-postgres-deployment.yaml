@@ -1,3 +1,12 @@
+# SUPERSEDED (Phase 8 Helm conversion) — this hand-rolled Deployment/Service
+# is no longer applied to the cluster. order-postgres now runs via the
+# Bitnami postgresql chart (see helm/order-postgres/values.yaml). Note the
+# credentials mechanism also changed in the switch: this file's plaintext
+# POSTGRES_PASSWORD env var doesn't carry over — the chart is configured
+# with auth.existingSecret: order-postgres-credentials, so it now reads the
+# password from a pre-existing Secret of that name in this namespace instead.
+# Kept here for reference only. Do NOT kubectl apply this file — it will
+# conflict with the Helm-managed Service of the same name.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

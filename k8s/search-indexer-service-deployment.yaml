@@ -20,7 +20,7 @@ spec:
             - sh
             - -c
             - |
-              until nc -z order-kafka 29092; do echo waiting for order-kafka; sleep 2; done
+              until nc -z order-kafka 9092; do echo waiting for order-kafka; sleep 2; done
               until nc -z order-elasticsearch 9200; do echo waiting for order-elasticsearch; sleep 2; done
       containers:
         - name: search-indexer-service

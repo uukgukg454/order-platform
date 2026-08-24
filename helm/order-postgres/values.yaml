@@ -1,0 +1,11 @@
+fullnameOverride: order-postgres
+
+auth:
+  existingSecret: order-postgres-credentials
+  secretKeys:
+    adminPasswordKey: postgres-password
+  database: orders
+
+primary:
+  persistence:
+    enabled: false
